@@ -1,0 +1,42 @@
+{
+  "template": "https://github.com/backofficedev/cookiecutter_chartbook",
+  "commit": "a52959a3dfb4296855c3d667463f0b8110424e66",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "Bank Fragility Monitor",
+      "project_slug": "p08_jiang_et_al_2024",
+      "project_description": "Replication and extension of Jiang et al. (2023) using bank call reports to monitor U.S. bank fragility.",
+      "author_name": "Anoushka Gehani and Hashir Bawany",
+      "author_email": "anoushkagehani@uchicago.edu, hashirbawany@uchicago.edu",
+      "python_version": "3.12",
+      "environment_manager": "conda",
+      "include_latex_reports": true,
+      "include_jupyter_notebooks": true,
+      "include_r_scripts": true,
+      "include_stata_scripts": true,
+      "include_chartbook": true,
+      "include_github_actions": true,
+      "include_fred": true,
+      "include_fed_yield_curve": true,
+      "include_ofr_api": true,
+      "include_bloomberg": true,
+      "include_crsp_stock": true,
+      "include_crsp_compustat": true,
+      "_copy_without_render": [
+        "*.bst",
+        "*.sty",
+        "*.eps",
+        "*.ipe",
+        "*.png",
+        "*.pdf",
+        "*.tex",
+        "*.bib",
+        ".github/workflows/*.yml"
+      ],
+      "_template": "https://github.com/backofficedev/cookiecutter_chartbook",
+      "_commit": "a52959a3dfb4296855c3d667463f0b8110424e66"
+    }
+  },
+  "directory": null
+}
