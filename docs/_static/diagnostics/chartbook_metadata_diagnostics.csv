@@ -1,0 +1,4 @@
+Name,Metadata Complete,Object Type,Identifier,Pipeline,Missing Fields,Page Link
+Bank Fragility Monitor,False,pipeline,P0,P0,"build_commands, os_compatibility, git_repo_URL",../index.html
+Public Repo Data,True,dataframe,repo_public,P0,,../dataframes/P0/repo_public.html
+Repo Rates,False,chart,repo_rates,P0,data_release_timing,../charts/P0.repo_rates.html
