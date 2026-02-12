@@ -3,7 +3,6 @@ from pathlib import Path
 import pandas as pd
 
 import pull_fred
-import pull_ofr_api_data
 from settings import config
 
 OUTPUT_DIR = config("OUTPUT_DIR")
@@ -30,12 +29,7 @@ def load_all(data_dir=DATA_DIR, normalize_timing=True):
     return df
 
 
-_descriptions_1 = pull_fred.series_descriptions
-_descriptions = pull_ofr_api_data.series_descriptions
-series_descriptions = {
-    **_descriptions_1,
-    **_descriptions,
-}
+series_descriptions = pull_fred.series_descriptions
 
 if __name__ == "__main__":
     df = load_all()

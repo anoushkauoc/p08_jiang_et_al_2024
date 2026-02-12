@@ -98,53 +98,46 @@ def task_pull():
         "file_dep": ["./src/settings.py", "./src/pull_fred.py"],
         "clean": [],
     }
+
     yield {
-        "name": "ofr",
-        "doc": "Pull data from OFR API",
-        "actions": [
-            "ipython ./src/settings.py",
-            "ipython ./src/pull_ofr_api_data.py",
-        ],
-        "targets": [DATA_DIR / "ofr_public_repo_data.parquet"],
-        "file_dep": ["./src/settings.py", "./src/pull_ofr_api_data.py"],
+        "name": "treasury_price_index",
+        "doc": "Pull Treasury price index (FRED series)",
+        "actions": ["ipython ./src/settings.py", "ipython ./src/pull_treasury_price_index.py"],
+        "targets": [DATA_DIR / "treasury_price_index.parquet"],
+        "file_dep": ["./src/settings.py", "./src/pull_treasury_price_index.py"],
+        "clean": [],
+    }
+
+    yield {
+        "name": "mbs_etfs",
+        "doc": "Pull RMBS + CMBS ETF prices (SPMB, CMBS)",
+        "actions": ["ipython ./src/settings.py", "ipython ./src/pull_mbs_etfs.py"],
+        "targets": [DATA_DIR / "mbs_etfs.parquet"],
+        "file_dep": ["./src/settings.py", "./src/pull_mbs_etfs.py"],
+        "clean": [],
+    }
+
+    yield {
+        "name": "gsib",
+        "doc": "Write GSIB RSSD list",
+        "actions": ["ipython ./src/settings.py", "ipython ./src/pull_gsib_banks.py"],
+        "targets": [DATA_DIR / "gsib_list.parquet"],
+        "file_dep": ["./src/settings.py", "./src/pull_gsib_banks.py"],
+        "clean": [],
+    }
+
+    # If your FFIEC pull script writes a parquet, add it too (update filename)
+    yield {
+        "name": "ffiec",
+        "doc": "Pull Call Reports from FFIEC",
+        "actions": ["ipython ./src/settings.py", "ipython ./src/pull_ffiec_hashir.py"],
+        "targets": [DATA_DIR / "ffiec_call_reports.parquet"],  # <-- change to your real output name
+        "file_dep": ["./src/settings.py", "./src/pull_ffiec_hashir.py"],
         "clean": [],
     }
 
 
-def task_summary_stats():
-    """Generate summary statistics tables"""
-    file_dep = ["./src/example_table.py"]
-    file_output = [
-        "example_table.tex",
-        "pandas_to_latex_simple_table1.tex",
-    ]
-    targets = [OUTPUT_DIR / file for file in file_output]
 
-    return {
-        "actions": [
-            "ipython ./src/example_table.py",
-            "ipython ./src/pandas_to_latex_demo.py",
-        ],
-        "targets": targets,
-        "file_dep": file_dep,
-        "clean": True,
-    }
-
-
-def task_example_plot():
-    """Example plots"""
-    file_dep = [Path("./src") / file for file in ["example_plot.py", "pull_fred.py"]]
-    file_output = ["example_plot.png"]
-    targets = [OUTPUT_DIR / file for file in file_output]
-
-    return {
-        "actions": [
-            "ipython ./src/example_plot.py",
-        ],
-        "targets": targets,
-        "file_dep": file_dep,
-        "clean": True,
-    }
 
 
 def task_chart_repo_rates():
