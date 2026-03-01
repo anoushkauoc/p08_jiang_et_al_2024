@@ -5,12 +5,22 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from pathlib import Path
 import time
+import io
+from dotenv import load_dotenv
+import sys
+
+sys.stdout.reconfigure(encoding='utf-8')
+
 
 # Set up data directory & report date
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "_data"
 DATA_DIR.mkdir(exist_ok=True)
-report_date = "03/31/2022"
+
+load_dotenv('.env')
+report_date = os.getenv("REPORT_DATE_SLASH")
+
+
 
 
 class FFIECDownloader:

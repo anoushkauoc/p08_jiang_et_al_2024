@@ -1,0 +1,476 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#############################################################################
+
+
+
+
+
+
+"""
+FFIEC Call Report Replication Script
+Replicates the WRDS-based bank balance sheet analysis using raw FFIEC bulk TXT files.
+
+Data source: FFIEC CDR Call Bulk All Schedules (e.g. 03312022 = Q1 2022)
+
+Schedules used:
+  - RC   : Main balance sheet (total assets, liabilities, equity, fed funds, repos)
+  - RCB  : Securities (RMBS, CMBS, ABS, Treasuries)
+  - RCCI : Loans (real estate, C&I, consumer, agricultural)
+  - RCE  : Deposits (insured, uninsured breakdowns)
+
+Usage:
+  Set ZIP_PATH to your downloaded zip file.
+  Outputs: summary tables printed to console + two bar charts saved as PNGs.
+"""
+
+
+; import zipfile
+; import io
+; import pandas as pd
+; import numpy as np
+; import matplotlib.pyplot as plt
+; from scipy.stats.mstats import winsorize
+; from pathlib import Path
+
+; # Set up data directory & report date
+; BASE_DIR = Path(__file__).resolve().parent.parent
+; DATA_DIR = BASE_DIR / "_data"
+; DATA_DIR.mkdir(exist_ok=True)
+
+; ZIP_PATH = DATA_DIR / "FFIEC CDR Call Bulk All Schedules 03312022.zip"
+
+; REPORT_DATE = "03312022"  # used to label outputs
+
+; # ─────────────────────────────────────────────
+; # HELPERS
+; # ─────────────────────────────────────────────
+
+; def read_ffiec(zf, filename):
+;     """
+;     Read an FFIEC bulk TXT file from a zip archive.
+;     These files have:
+;       Row 0: column mnemonics (e.g. RCFD0213)
+;       Row 1: human-readable descriptions (skip)
+;       Row 2+: data
+;     Returns a DataFrame indexed by IDRSSD (bank ID), with lowercased column names.
+;     """
+;     with zf.open(filename) as f:
+;         df = pd.read_csv(f, sep='\t', header=0, skiprows=[1],
+;                          low_memory=False, dtype=str)
+;     df.columns = df.columns.str.strip().str.replace('"', '').str.lower()
+;     df = df.rename(columns={'idrssd': 'rssd9001'})
+;     df['rssd9001'] = pd.to_numeric(df['rssd9001'], errors='coerce')
+;     df = df.dropna(subset=['rssd9001'])
+;     df['rssd9001'] = df['rssd9001'].astype(int)
+;     df = df.set_index('rssd9001')
+;     # convert all value columns to numeric
+;     df = df.apply(pd.to_numeric, errors='coerce')
+;     return df
+
+
+; def read_multipart(zf, base_name, n_parts):
+;     """Concatenate multi-part FFIEC files column-wise (same banks, split columns)."""
+;     parts = []
+;     for i in range(1, n_parts + 1):
+;         fname = f"{base_name}({i} of {n_parts}).txt"
+;         parts.append(read_ffiec(zf, fname))
+;     return pd.concat(parts, axis=1)
+
+
+; def fmt_dollar(num_thousands):
+;     """Format a number in thousands to B/T string."""
+;     num = num_thousands * 1000
+;     if num >= 1e12:
+;         return f"{num / 1e12:.1f}T"
+;     elif num >= 1e9:
+;         return f"{num / 1e9:.1f}B"
+;     else:
+;         return f"{num / 1e6:.1f}M"
+
+
+; # ─────────────────────────────────────────────
+; # STEP 1: LOAD SCHEDULES
+; # ─────────────────────────────────────────────
+; print("Loading FFIEC schedules...")
+
+; with zipfile.ZipFile(ZIP_PATH) as zf:
+;     rc   = read_ffiec(zf, f"FFIEC CDR Call Schedule RC {REPORT_DATE}.txt")
+;     rcb  = read_multipart(zf, f"FFIEC CDR Call Schedule RCB {REPORT_DATE}", 2)
+;     rcci = read_ffiec(zf, f"FFIEC CDR Call Schedule RCCI {REPORT_DATE}.txt")
+;     rce  = read_ffiec(zf, f"FFIEC CDR Call Schedule RCE {REPORT_DATE}.txt")
+
+; print(f"  RC:   {rc.shape[0]:,} banks, {rc.shape[1]} cols")
+; print(f"  RCB:  {rcb.shape[0]:,} banks, {rcb.shape[1]} cols")
+; print(f"  RCCI: {rcci.shape[0]:,} banks, {rcci.shape[1]} cols")
+; print(f"  RCE:  {rce.shape[0]:,} banks, {rce.shape[1]} cols")
+
+; # ─────────────────────────────────────────────
+; # STEP 2: BUILD ASSET TABLE
+; # Mirrors the original rcfd_data / rcon_data logic.
+; # For each item, prefer the RCFD (consolidated/global) version if available,
+; # fall back to RCON (domestic) — replicating the outer merge + fillna logic.
+; # ─────────────────────────────────────────────
+
+; def safe_sum(df, cols):
+;     """Sum only columns that exist in df."""
+;     existing = [c for c in cols if c in df.columns]
+;     if not existing:
+;         return pd.Series(np.nan, index=df.index)
+;     return df[existing].sum(axis=1, min_count=1)
+
+
+; # ── Securities (from RCB) ──
+; # RMBS - residential mortgage-backed
+; global_rmbs  = ['rcfdg301','rcfdg303','rcfdg305','rcfdg307','rcfdg309','rcfdg311',
+;                 'rcfdg313','rcfdg315','rcfdg317','rcfdg319','rcfdg321','rcfdg323']
+; rcon_rmbs    = ['rcong301','rcong303','rcong305','rcong307','rcong309','rcong311',
+;                 'rcong313','rcong315','rcong317','rcong319','rcong321','rcong323',
+;                 'rconht55','rconht57']
+; # CMBS - commercial mortgage-backed
+; global_cmbs  = ['rcfdk143','rcfdk145','rcfdk147','rcfdk149','rcfdk151','rcfdk153','rcfdk157']
+; rcon_cmbs    = ['rconk143','rconk145','rconk147','rconk149','rconk151','rconk153','rconk157']
+; # ABS - asset-backed
+; global_abs   = ['rcfdc988','rcfdc027']
+; rcon_abs     = ['rconc988','rconc027','rconht59','rconht61']
+; # Other securities
+; global_other = ['rcfd1738','rcfd1741','rcfd1743','rcfd1746']
+; rcon_other   = ['rcon1738','rcon1741','rcon1743','rcon1746']
+
+; # ── Loans (from RCCI) ──
+; # Real estate loans
+; glob_re_res  = ['rcfd1420','rcfd1797','rcfd5367','rcfd5368','rcfd1460']
+; rcon_re_res  = ['rcon1420','rcon1797','rcon5367','rcon5368','rcon1460']
+; glob_re_com  = ['rcfdf160','rcfdf161']
+; rcon_re_com  = ['rconf160','rconf161']
+; glob_re_oth  = ['rcfdf158','rcfdf159']
+; rcon_re_oth  = ['rconf158','rconf159']
+; # C&I loans
+; glob_ci      = ['rcfd1763','rcfd1764']
+; rcon_ci      = ['rcon1766']
+; # Consumer
+; glob_cons    = ['rcfdb538','rcfdb539','rcfdk137','rcfdk207']
+; rcon_cons    = ['rconb538','rconb539','rconk137','rconk207']
+; # Non-repo (domestic only)
+; rcon_nonrep  = ['rconj454','rconj464','rconj451']
+
+; # ─────────────────────────────────────────────
+; # Build the unified asset DataFrame
+; # Strategy: use RCFD where non-null, else RCON (mimics original outer merge + fillna)
+; # ─────────────────────────────────────────────
+
+; def coalesce(s_rcfd, s_rcon):
+;     """Use RCFD value; where missing, fill from RCON."""
+;     return s_rcfd.combine_first(s_rcon)
+
+
+; bank_asset = pd.DataFrame()
+
+; # Total assets
+; bank_asset['Total Asset'] = coalesce(rc.get('rcfd2170', pd.Series(dtype=float)),
+;                                       rc.get('rcon2170', pd.Series(dtype=float)))
+; # Cash
+; bank_asset['cash'] = coalesce(rc.get('rcfd0071', pd.Series(dtype=float)) + rc.get('rcfd0081', pd.Series(dtype=float)),
+;                                rc.get('rcon0071', pd.Series(dtype=float)) + rc.get('rcon0081', pd.Series(dtype=float)))
+
+; # Securities total
+; bank_asset['security_total'] = coalesce(
+;     rcb.get('rcfd1771', pd.Series(dtype=float)) + rcb.get('rcfd1773', pd.Series(dtype=float)),
+;     rcb.get('rcon1771', pd.Series(dtype=float)) + rcb.get('rcon1773', pd.Series(dtype=float))
+; )
+; # Treasury
+; bank_asset['security_treasury'] = coalesce(
+;     rcb.get('rcfd0213', pd.Series(dtype=float)) + rcb.get('rcfd1287', pd.Series(dtype=float)),
+;     rcb.get('rcon0213', pd.Series(dtype=float)) + rcb.get('rcon1287', pd.Series(dtype=float))
+; )
+; # RMBS
+; bank_asset['security_rmbs'] = coalesce(safe_sum(rcb, global_rmbs),
+;                                         safe_sum(rcb, rcon_rmbs))
+; # CMBS
+; bank_asset['security_cmbs'] = coalesce(safe_sum(rcb, global_cmbs),
+;                                         safe_sum(rcb, rcon_cmbs))
+; # ABS
+; bank_asset['security_abs'] = coalesce(safe_sum(rcb, global_abs),
+;                                        safe_sum(rcb, rcon_abs))
+; # Other securities
+; bank_asset['security_other'] = coalesce(safe_sum(rcb, global_other),
+;                                          safe_sum(rcb, rcon_other))
+
+; # Total loans
+; bank_asset['Total_Loan'] = coalesce(rcci.get('rcfd2122', pd.Series(dtype=float)),
+;                                      rcci.get('rcon2122', pd.Series(dtype=float)))
+; # Real estate sub-categories
+; bank_asset['Residential_Mortgage']      = coalesce(safe_sum(rcci, glob_re_res), safe_sum(rcci, rcon_re_res))
+; bank_asset['Commerical_Mortgage']       = coalesce(safe_sum(rcci, glob_re_com), safe_sum(rcci, rcon_re_com))
+; bank_asset['Other_Real_Estate_Mortgage']= coalesce(safe_sum(rcci, glob_re_oth), safe_sum(rcci, rcon_re_oth))
+; bank_asset['Real_Estate_Loan']          = (bank_asset['Residential_Mortgage'] +
+;                                             bank_asset['Commerical_Mortgage'] +
+;                                             bank_asset['Other_Real_Estate_Mortgage'])
+; bank_asset['Agri_Loan']     = coalesce(rcci.get('rcfd1590', pd.Series(dtype=float)),
+;                                         rcci.get('rcon1590', pd.Series(dtype=float)))
+; bank_asset['Comm_Indu_Loan']= coalesce(safe_sum(rcci, glob_ci), safe_sum(rcci, rcon_ci))
+; bank_asset['Consumer_Loan'] = coalesce(safe_sum(rcci, glob_cons), safe_sum(rcci, rcon_cons))
+; bank_asset['Non_Rep_Loan']  = safe_sum(rcci, rcon_nonrep)   # domestic only by design
+
+; # Fed funds sold / reverse repo (from RC schedule)
+; bank_asset['Fed_Fund_Sold'] = rc.get('rconb987', pd.Series(dtype=float))
+; bank_asset['Reverse_Repo']  = coalesce(rc.get('rcfdb989', pd.Series(dtype=float)),
+;                                         rc.get('rconb989', pd.Series(dtype=float)))
+
+; # Drop rows with no total asset data
+; bank_asset = bank_asset.dropna(subset=['Total Asset'])
+; print(f"\nAsset table: {bank_asset.shape[0]:,} banks")
+
+; # ─────────────────────────────────────────────
+; # STEP 3: BUILD LIABILITY TABLE
+; # ─────────────────────────────────────────────
+
+; bank_liability = pd.DataFrame(index=bank_asset.index)
+
+; bank_liability['Total Liability']    = coalesce(rc.get('rcfd2948', pd.Series(dtype=float)),
+;                                                  rc.get('rcon2948', pd.Series(dtype=float)))
+; bank_liability['Domestic Deposit']   = rc.get('rcon2200', pd.Series(dtype=float))
+
+; insured_dep_cols = ['rconhk05','rconmt91','rconmt87']
+; bank_liability['Insured Deposit']    = safe_sum(rce, insured_dep_cols)
+; bank_liability['Uninsured Deposit']  = (bank_liability['Domestic Deposit'] -
+;                                          bank_liability['Insured Deposit'])
+
+; bank_liability['Uninsured Time Deposits']            = rce.get('rconj474', pd.Series(dtype=float))
+; bank_liability['Uninsured Long-Term Time Deposits']  = safe_sum(rce, ['rconhk14','rconhk15'])
+; bank_liability['Uninsured Short-Term Time Deposits'] = rce.get('rconk222', pd.Series(dtype=float))
+; bank_liability['Foreign Deposit']    = rc.get('rcfn2200', pd.Series(dtype=float))
+; bank_liability['Fed Fund Purchase']  = rc.get('rconb993', pd.Series(dtype=float))
+; bank_liability['Repo']               = rc.get('rconb995', pd.Series(dtype=float))
+; bank_liability['Other Liability']    = coalesce(rc.get('rcfd2930', pd.Series(dtype=float)),
+;                                                  rc.get('rcon2930', pd.Series(dtype=float)))
+; bank_liability['Total Equity']       = coalesce(rc.get('rcfdg105', pd.Series(dtype=float)),
+;                                                  rc.get('rcong105', pd.Series(dtype=float)))
+; bank_liability['Common Stock']       = coalesce(rc.get('rcfd3230', pd.Series(dtype=float)),
+;                                                  rc.get('rcon3230', pd.Series(dtype=float)))
+; bank_liability['Preferred Stock']    = coalesce(rc.get('rcfd3838', pd.Series(dtype=float)),
+;                                                  rc.get('rcon3838', pd.Series(dtype=float)))
+; bank_liability['Retained Earning']   = coalesce(rc.get('rcfd3632', pd.Series(dtype=float)),
+;                                                  rc.get('rcon3632', pd.Series(dtype=float)))
+
+; # ─────────────────────────────────────────────
+; # STEP 4: BANK CLASSIFICATION
+; #   0 = Small  (<$1.384B)
+; #   1 = Large  (>=$1.384B, non-GSIB)
+; #   2 = GSIB
+; # ─────────────────────────────────────────────
+
+; THRESHOLD = 1_384_000  # $1.384B in thousands (Call Reports are in $thousands)
+
+; GSIB_IDS = [934329,488318,212465,449038,476810,3382547,852218,651448,480228,1443266,
+;             413208,3357620,1015560,2980209,214807,304913,670560,2325882,2182786,3066025,
+;             398668,541101,229913,1456501,2489805,722777,35301,93619,352745,812164,925411,
+;             3212149,451965,688079,1225761,2362458,2531991]
+
+; bank_asset['Bank Category'] = 0
+; bank_asset.loc[bank_asset['Total Asset'] >= THRESHOLD, 'Bank Category'] = 1
+; bank_asset.loc[bank_asset.index.isin(GSIB_IDS), 'Bank Category'] = 2
+
+; print(f"\nBank counts:")
+; print(f"  Small banks: {(bank_asset['Bank Category']==0).sum():,}")
+; print(f"  Large banks: {(bank_asset['Bank Category']==1).sum():,}")
+; print(f"  GSIBs:       {(bank_asset['Bank Category']==2).sum():,}")
+
+; # ─────────────────────────────────────────────
+; # STEP 5: SUMMARY STATS TABLE (Assets)
+; # Winsorized mean/SD as % of total assets, by bank tier
+; # ─────────────────────────────────────────────
+
+; def summary_stats(df, label_col='Bank Category'):
+;     asset_cols = [c for c in df.columns if c != label_col]
+;     pct = df[asset_cols].div(df['Total Asset'], axis=0) * 100
+
+;     result = pd.DataFrame()
+;     result['Aggregate'] = (df[asset_cols].sum() / df['Total Asset'].sum()) * 100
+
+;     for tier, label in [(None, 'Full sample'), (0, 'small'), (1, 'large'), (2, 'GSIB')]:
+;         subset = pct if tier is None else pct[df[label_col] == tier]
+;         result[f'{label}(mean)'] = subset.apply(
+;             lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).mean()
+;         )
+;         result[f'{label}(sd)']   = subset.apply(
+;             lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).std()
+;         )
+
+;     return result.round(1)
+
+; asset_summary = summary_stats(bank_asset)
+
+; # Fix Total Asset row to show dollar amounts — convert to object dtype first
+; asset_summary = asset_summary.astype(object)
+; for tier, mask in [('Aggregate', None),
+;                    ('Full sample(mean)', None),
+;                    ('small(mean)',   bank_asset['Bank Category']==0),
+;                    ('large(mean)',   bank_asset['Bank Category']==1),
+;                    ('GSIB(mean)',    bank_asset['Bank Category']==2)]:
+;     sub = bank_asset if mask is None else bank_asset[mask]
+;     if 'mean' in tier:
+;         asset_summary.loc['Total Asset', tier] = fmt_dollar(sub['Total Asset'].mean())
+;     else:
+;         asset_summary.loc['Total Asset', tier] = fmt_dollar(sub['Total Asset'].sum())
+
+; for tier, mask in [('Full sample(sd)', None),
+;                    ('small(sd)',  bank_asset['Bank Category']==0),
+;                    ('large(sd)',  bank_asset['Bank Category']==1),
+;                    ('GSIB(sd)',   bank_asset['Bank Category']==2)]:
+;     sub = bank_asset if mask is None else bank_asset[mask]
+;     asset_summary.loc['Total Asset', tier] = fmt_dollar(sub['Total Asset'].std())
+
+; # Add bank counts row
+; asset_summary.loc['N Banks', 'Aggregate']       = len(bank_asset)
+; asset_summary.loc['N Banks', 'Full sample(mean)'] = len(bank_asset)
+; asset_summary.loc['N Banks', 'small(mean)']     = (bank_asset['Bank Category']==0).sum()
+; asset_summary.loc['N Banks', 'large(mean)']     = (bank_asset['Bank Category']==1).sum()
+; asset_summary.loc['N Banks', 'GSIB(mean)']      = (bank_asset['Bank Category']==2).sum()
+
+; # Rename index to clean labels
+; rename_map = {
+;     'Total Asset': 'Total Asset $', 'cash': 'Cash',
+;     'security_total': 'Securities', 'security_treasury': 'Treasury',
+;     'security_rmbs': 'RMBS', 'security_cmbs': 'CMBS',
+;     'security_abs': 'ABS', 'security_other': 'Other Security',
+;     'Total_Loan': 'Total Loan', 'Real_Estate_Loan': 'Real Estate Loan',
+;     'Residential_Mortgage': 'Residential Mortgage',
+;     'Commerical_Mortgage': 'Commercial Mortgage',
+;     'Other_Real_Estate_Mortgage': 'Other Real Estate Loan',
+;     'Agri_Loan': 'Agricultural Loan', 'Comm_Indu_Loan': 'Commercial & Industrial Loan',
+;     'Consumer_Loan': 'Consumer Loan', 'Non_Rep_Loan': 'Loan to Non-Depository',
+;     'Fed_Fund_Sold': 'Fed Funds Sold', 'Reverse_Repo': 'Reverse Repo',
+;     'Bank Category': 'Bank Category'
+; }
+; asset_summary = asset_summary.rename(index=rename_map)
+; asset_summary = asset_summary.drop(index='Bank Category', errors='ignore')
+; asset_summary = asset_summary.fillna('')
+
+; print("\n===== ASSET SUMMARY TABLE =====")
+; print(asset_summary.to_string())
+
+; # ─────────────────────────────────────────────
+; # STEP 6: SUMMARY STATS TABLE (Liabilities)
+; # ─────────────────────────────────────────────
+
+; bank_liability['Total Asset']    = bank_asset['Total Asset']
+; bank_liability['Bank Category']  = bank_asset['Bank Category']
+; bank_liability = bank_liability.dropna(subset=['Total Asset'])
+
+; liability_summary = summary_stats(bank_liability)
+; liability_summary = liability_summary.drop(index=['Total Asset','Bank Category'], errors='ignore')
+; liability_summary = liability_summary.fillna(0).round(1)
+
+; print("\n===== LIABILITY SUMMARY TABLE =====")
+; print(liability_summary.to_string())
+
+; # ─────────────────────────────────────────────
+; # STEP 7: CHARTS
+; # ─────────────────────────────────────────────
+
+; # ── Chart 1: Aggregate asset composition (stacked bar) ──
+; agg = bank_asset.sum()
+; tot = agg['Total Asset']
+; proportions_assets = {
+;     'Cash':            (agg['cash'] / tot) * 24,
+;     'Security':        (agg['security_total'] / tot) * 24,
+;     'Real Estate Loan':(agg['Real_Estate_Loan'] / tot) * 24,
+;     'Other Loan':      ((agg['Comm_Indu_Loan'] + agg['Consumer_Loan'] + agg['Agri_Loan']) / tot) * 24,
+;     'Other Asset':     ((tot - agg['cash'] - agg['security_total'] -
+;                           agg['Real_Estate_Loan'] - agg['Comm_Indu_Loan'] -
+;                           agg['Consumer_Loan'] - agg['Agri_Loan']) / tot) * 24,
+; }
+
+; colors_assets = ['navy','royalblue','deepskyblue','lightskyblue','lightblue']
+; fig, ax = plt.subplots(figsize=(12, 2))
+; start = 0
+; for (cat, val), color in zip(proportions_assets.items(), colors_assets):
+;     ax.barh('Total Assets', val, left=start, color=color)
+;     ax.text(start + val/2, 0, cat, ha='center', va='center',
+;             color='white', fontsize=9, fontweight='bold')
+;     start += val
+; ax.set_xlim(0, 24)
+; ax.set_xlabel('Trillion ($)')
+; ax.set_title(f'Total Assets — All Banks ({REPORT_DATE})')
+; ax.get_yaxis().set_visible(False)
+; for spine in ax.spines.values(): spine.set_visible(False)
+; ax.tick_params(bottom=False, left=False)
+; ax.xaxis.grid(True, color='grey', linestyle='--', linewidth=0.5)
+; plt.tight_layout()
+; plt.savefig('/mnt/user-data/outputs/chart_assets.png', dpi=150, bbox_inches='tight')
+; print("\nSaved: chart_assets.png")
+
+; # ── Chart 2: Aggregate liability composition (stacked bar) ──
+; agg_l = bank_liability.sum()
+; tot_l = agg_l['Total Liability']
+; proportions_liab = {
+;     'Insured Deposit':  (agg_l['Insured Deposit'] / tot_l) * 24,
+;     'Uninsured Deposit':(agg_l['Uninsured Deposit'] / tot_l) * 24,
+;     'Total Equity':     (agg_l['Total Equity'] / tot_l) * 24,
+;     'Other':            ((tot_l - agg_l['Insured Deposit'] - agg_l['Uninsured Deposit'] -
+;                            agg_l['Total Equity']) / tot_l) * 24,
+; }
+; colors_liab = ['darkred','red','sandybrown','peachpuff']
+; fig, ax = plt.subplots(figsize=(12, 2))
+; start = 0
+; for (cat, val), color in zip(proportions_liab.items(), colors_liab):
+;     ax.barh('Total Liabilities', val, left=start, color=color)
+;     ax.text(start + val/2, 0, cat, ha='center', va='center',
+;             color='black', fontsize=9, fontweight='bold')
+;     start += val
+; ax.set_xlim(0, 24)
+; ax.set_xlabel('Trillion ($)')
+; ax.set_title(f'Total Liabilities — All Banks ({REPORT_DATE})')
+; ax.get_yaxis().set_visible(False)
+; for spine in ax.spines.values(): spine.set_visible(False)
+; ax.tick_params(bottom=False, left=False)
+; ax.xaxis.grid(True, color='grey', linestyle='--', linewidth=0.5)
+; plt.tight_layout()
+; plt.savefig('/mnt/user-data/outputs/chart_liabilities.png', dpi=150, bbox_inches='tight')
+; print("Saved: chart_liabilities.png")
+
+; # ─────────────────────────────────────────────
+; # SAVE TABLES TO CSV
+; # ─────────────────────────────────────────────
+; asset_summary.to_csv('/mnt/user-data/outputs/asset_summary.csv')
+; liability_summary.to_csv('/mnt/user-data/outputs/liability_summary.csv')
+; print("\nSaved: asset_summary.csv, liability_summary.csv")
+; print("\nDone!")
