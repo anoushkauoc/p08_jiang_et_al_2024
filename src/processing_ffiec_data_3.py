@@ -21,10 +21,11 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 load_dotenv('.env')
 
-REPORT_DATE = os.getenv("REPORT_DATE")
+REPORT_DATE = os.getenv("REPORT_DATE", "03312022")
 
 ZIP_PATH = DATA_DIR / f"FFIEC CDR Call Bulk All Schedules {REPORT_DATE}.zip"
-
+if not ZIP_PATH.exists():
+    raise FileNotFoundError(f"Missing FFIEC zip file: {ZIP_PATH}")
 
 
 # Section 2 : Defining helper functions
@@ -272,7 +273,14 @@ bank_liability.loc[replace_index, bank_liability.columns[:15]] = bank_liability.
 columns_to_drop = [col for col in bank_liability.columns if '_df2' in col]
 bank_liability.drop(columns=columns_to_drop, inplace=True)
 
+bank_panel = bank_asset.join(bank_liability, how="outer", rsuffix="_liab")
+bank_panel = bank_panel.reset_index().rename(columns={"rssd9001": "rssd_id_call"})
+bank_panel["report_date"] = REPORT_DATE
 
+bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
+bank_panel.to_parquet(bank_panel_path, index=False)
+
+print(f"Bank panel saved -> {bank_panel_path}")
 
 #Section 7: Summary stats for assets by bank category
 #Section 7.1: Defining classes for small, large, and GSIB banks
