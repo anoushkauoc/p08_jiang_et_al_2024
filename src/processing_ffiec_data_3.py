@@ -59,6 +59,8 @@ def fmt_dollar(num_thousands):
 
 
 #Section 3: Loading the zip files & creating rcfc, rcon, and rcfn files
+# Section 3: Loading the zip files & creating rcfd, rcon, and rcfn files
+
 def find_member_name(zf, target_stub: str) -> str:
     """
     Find a member in the zip whose filename contains target_stub.
@@ -67,8 +69,8 @@ def find_member_name(zf, target_stub: str) -> str:
     matches = [name for name in names if target_stub.lower() in name.lower()]
     if not matches:
         raise FileNotFoundError(
-            f"Could not find '{target_stub}' inside zip.\nAvailable files:\n" +
-            "\n".join(names[:50])
+            f"Could not find '{target_stub}' inside zip.\nAvailable files:\n"
+            + "\n".join(names[:50])
         )
     return matches[0]
 
@@ -84,11 +86,12 @@ with zipfile.ZipFile(ZIP_PATH) as zf:
     rcci = read_ffiec(zf, rcci_name)
     rce = read_ffiec(zf, rce_name)
 
-    # RCB may be multipart
+    # RCB may be one file or split across two files
     rcb_part_names = [
         name for name in zf.namelist()
         if f"FFIEC CDR Call Schedule RCB {REPORT_DATE}".lower() in name.lower()
     ]
+
     if len(rcb_part_names) == 2:
         rcb = pd.concat([read_ffiec(zf, name) for name in sorted(rcb_part_names)], axis=1)
     elif len(rcb_part_names) == 1:
@@ -98,6 +101,25 @@ with zipfile.ZipFile(ZIP_PATH) as zf:
             f"Could not find RCB files for {REPORT_DATE} in zip."
         )
 
+rcfd_df = pd.concat([
+    rc[[c for c in rc.columns if c.startswith("rcfd")]],
+    rca[[c for c in rca.columns if c.startswith("rcfd")]],
+    rcb[[c for c in rcb.columns if c.startswith("rcfd")]],
+    rcci[[c for c in rcci.columns if c.startswith("rcfd")]],
+], axis=1)
+
+rcfd_df = rcfd_df.loc[:, ~rcfd_df.columns.duplicated()]
+
+rcon_df = pd.concat([
+    rc[[c for c in rc.columns if c.startswith("rcon")]],
+    rcb[[c for c in rcb.columns if c.startswith("rcon")]],
+    rcci[[c for c in rcci.columns if c.startswith("rcon")]],
+    rce[[c for c in rce.columns if c.startswith("rcon")]],
+], axis=1)
+
+rcon_df = rcon_df.loc[:, ~rcon_df.columns.duplicated()]
+
+rcfn_df = rc[[c for c in rc.columns if c.startswith("rcfn")]]
 
 
 # Section 4: Variable groupings
