@@ -46,6 +46,21 @@ def generate_table1(bank_panel):
 
     print(f"Table saved to {table_path}")
 
+def generate_updated_table(bank_panel):
+
+    updated = bank_panel.groupby("bank_group").agg(
+        assets=("assets", "sum"),
+        unrealized_losses=("loss_estimate", "sum")
+    )
+
+    updated = updated.round(2)
+
+    updated.to_latex(
+        OUTPUT_DIR / "table1_updated.tex",
+        caption="Updated unrealized losses through 2025",
+        label="tab:table1_updated",
+        float_format="%.2f"
+    )
 
 def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     out = a / b.replace({0: np.nan})
