@@ -1,13 +1,14 @@
 """
 dodo.py — pydoit build file for the Jiang et al. replication project
 
-Current pipeline:
+Pipeline:
     1. pull_ffiec_hashir.py         -> downloads FFIEC zip into _data/
-    2. processing_ffiec_data_3.py   -> reads zip, writes bank_panel parquet and A1-style outputs
+    2. processing_ffiec_data_3.py   -> reads zip, writes bank panel and A1-style outputs
     3. pull_gsib_banks.py           -> writes GSIB list parquet
     4. pull_treasury_price_index.py -> writes Treasury price index parquet
     5. pull_mbs_etfs.py             -> writes MBS ETF parquet
-    6. make_table_1.py              -> writes Table 1 csv/tex
+    6. compute_market_shocks.py     -> writes market shock parquet
+    7. make_table_1.py              -> writes Table 1 csv/tex
 
 Usage:
     doit
@@ -38,8 +39,8 @@ OUT_DIR.mkdir(exist_ok=True)
 # ---------------------------------------------------------------------
 load_dotenv(BASE_DIR / ".env")
 
-REPORT_DATE = os.getenv("REPORT_DATE", "03312022")
-REPORT_DATE_SLASH = os.getenv("REPORT_DATE_SLASH", "03/31/2022")
+REPORT_DATE = os.getenv("REPORT_DATE", "12312025")
+REPORT_DATE_SLASH = os.getenv("REPORT_DATE_SLASH", "12/31/2025")
 
 # ---------------------------------------------------------------------
 # Derived file paths
@@ -54,11 +55,12 @@ FIGURE_A1_PNG = OUT_DIR / f"figure_A1_{REPORT_DATE}.png"
 GSIB_PARQUET = DATA_DIR / "gsib_list.parquet"
 TREASURY_PARQUET = DATA_DIR / "treasury_price_index.parquet"
 MBS_ETF_PARQUET = DATA_DIR / "mbs_etfs.parquet"
+MARKET_SHOCKS_PARQUET = DATA_DIR / "market_shocks.parquet"
 
 TABLE1_CSV = OUT_DIR / "table_1.csv"
 TABLE1_TEX = OUT_DIR / "table_1.tex"
 
-# Optional future outputs if/when you add these scripts
+# Optional future outputs
 TABLEA1_CSV = OUT_DIR / "table_A1.csv"
 TABLEA1_TEX = OUT_DIR / "table_A1.tex"
 FIGUREA1_FINAL = OUT_DIR / "figure_A1_final.png"
@@ -86,6 +88,7 @@ DOIT_CONFIG = {
         "pull_gsib",
         "pull_treasury",
         "pull_mbs_etfs",
+        "compute_market_shocks",
         "make_table_1",
     ]
 }
@@ -164,18 +167,33 @@ def task_pull_mbs_etfs():
 
 
 # ---------------------------------------------------------------------
-# Task 6: Make Table 1
+# Task 6: Compute market shocks
+# ---------------------------------------------------------------------
+def task_compute_market_shocks():
+    """Compute market shocks from Treasury and MBS price data."""
+    return {
+        "actions": [_run("compute_market_shocks.py")],
+        "task_dep": ["pull_treasury", "pull_mbs_etfs"],
+        "file_dep": [str(TREASURY_PARQUET), str(MBS_ETF_PARQUET)],
+        "targets": [str(MARKET_SHOCKS_PARQUET)],
+        "uptodate": [lambda: _exists(MARKET_SHOCKS_PARQUET)],
+        "verbosity": 2,
+        "clean": True,
+    }
+
+
+# ---------------------------------------------------------------------
+# Task 7: Make Table 1
 # ---------------------------------------------------------------------
 def task_make_table_1():
-    """Build Table 1 outputs from processed bank panel and price inputs."""
+    """Build Table 1 outputs from processed bank panel and computed market shocks."""
     return {
         "actions": [_run("make_table_1.py")],
-        "task_dep": ["process_ffiec", "pull_gsib", "pull_treasury", "pull_mbs_etfs"],
+        "task_dep": ["process_ffiec", "pull_gsib", "compute_market_shocks"],
         "file_dep": [
             str(BANK_PANEL),
             str(GSIB_PARQUET),
-            str(TREASURY_PARQUET),
-            str(MBS_ETF_PARQUET),
+            str(MARKET_SHOCKS_PARQUET),
             str(SRC_DIR / "make_table_1.py"),
         ],
         "targets": [str(TABLE1_CSV), str(TABLE1_TEX)],
@@ -187,7 +205,6 @@ def task_make_table_1():
 
 # ---------------------------------------------------------------------
 # Optional future tasks
-# Uncomment once these scripts exist
 # ---------------------------------------------------------------------
 # def task_make_table_A1():
 #     """Build Table A1 outputs."""
@@ -235,6 +252,7 @@ def task_clean_outputs():
         GSIB_PARQUET,
         TREASURY_PARQUET,
         MBS_ETF_PARQUET,
+        MARKET_SHOCKS_PARQUET,
         TABLE1_CSV,
         TABLE1_TEX,
         TABLEA1_CSV,
