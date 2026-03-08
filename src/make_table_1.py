@@ -24,6 +24,28 @@ BUCKETS = [
 ]
 
 
+def generate_table1(bank_panel):
+
+    summary = bank_panel.groupby("bank_group").agg(
+        total_assets=("assets", "sum"),
+        uninsured_deposits=("uninsured_deposits", "sum"),
+        securities=("securities", "sum"),
+    )
+
+    summary = summary.round(2)
+
+    table_path = OUTPUT_DIR / "table1.tex"
+
+    summary.to_latex(
+        table_path,
+        caption="Bank balance sheet exposure by bank group",
+        label="tab:table1",
+        float_format="%.2f"
+    )
+
+    print(f"Table saved to {table_path}")
+
+
 def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     out = a / b.replace({0: np.nan})
     return out.replace([np.inf, -np.inf], np.nan)
