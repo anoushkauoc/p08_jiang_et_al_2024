@@ -8,6 +8,7 @@ import pandas as pd
 from pull_gsib_banks import pull_gsib_list
 from settings import config
 
+
 DATA_DIR = Path(config("DATA_DIR"))
 OUTPUT_DIR = Path(config("OUTPUT_DIR"))
 REPORT_DATE = config("REPORT_DATE")
