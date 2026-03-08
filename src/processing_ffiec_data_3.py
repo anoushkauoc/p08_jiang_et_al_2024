@@ -511,38 +511,54 @@ for bucket in bucket_names:
     rcfd_data[f"treasury_{bucket}"] = 0.0
     rcfd_data[f"other_assets_{bucket}"] = 0.0
     rcfd_data[f"res_mtg_{bucket}"] = 0.0
+    rcfd_data[f"other_loan_{bucket}"] = 0.0
 
     rcon_data[f"treasury_{bucket}"] = 0.0
     rcon_data[f"other_assets_{bucket}"] = 0.0
     rcon_data[f"res_mtg_{bucket}"] = 0.0
+    rcon_data[f"other_loan_{bucket}"] = 0.0
 
+# Coarse fallback: put current aggregates into the longest bucket
 rcfd_data["treasury_15plus"] = rcfd_data["security_treasury"]
+
+# Keep securities that are not Treasury or RMBS in other_assets
 rcfd_data["other_assets_15plus"] = (
     rcfd_data["security_cmbs"]
     + rcfd_data["security_abs"]
     + rcfd_data["security_other"]
-    + rcfd_data["Commerical_Mortgage"]
+)
+
+# Residential mortgage stays separate
+rcfd_data["res_mtg_15plus"] = rcfd_data["Residential_Mortgage"]
+
+# Put non-residential / other loans here
+rcfd_data["other_loan_15plus"] = (
+    rcfd_data["Commerical_Mortgage"]
     + rcfd_data["Other_Real_Estate_Mortgage"]
     + rcfd_data["Agri_Loan"]
     + rcfd_data["Comm_Indu_Loan"]
     + rcfd_data["Consumer_Loan"]
     + rcfd_data["Non_Rep_Loan"].fillna(0)
 )
-rcfd_data["res_mtg_15plus"] = rcfd_data["Residential_Mortgage"]
 
 rcon_data["treasury_15plus"] = rcon_data["security_treasury"]
+
 rcon_data["other_assets_15plus"] = (
     rcon_data["security_cmbs"]
     + rcon_data["security_abs"]
     + rcon_data["security_other"]
-    + rcon_data["Commerical_Mortgage"]
+)
+
+rcon_data["res_mtg_15plus"] = rcon_data["Residential_Mortgage"]
+
+rcon_data["other_loan_15plus"] = (
+    rcon_data["Commerical_Mortgage"]
     + rcon_data["Other_Real_Estate_Mortgage"]
     + rcon_data["Agri_Loan"]
     + rcon_data["Comm_Indu_Loan"]
     + rcon_data["Consumer_Loan"]
     + rcon_data["Non_Rep_Loan"].fillna(0)
 )
-rcon_data["res_mtg_15plus"] = rcon_data["Residential_Mortgage"]
 
 # Section 5.2: Merging rcfd and rcon to create asset tables
 bank_asset = pd.merge(

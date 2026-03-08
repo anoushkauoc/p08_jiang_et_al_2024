@@ -12,7 +12,6 @@ DATA_DIR = Path(config("DATA_DIR"))
 OUTPUT_DIR = Path(config("OUTPUT_DIR"))
 REPORT_DATE = config("REPORT_DATE")
 
-# Assets are in thousands of dollars
 SMALL_CUTOFF = 1.384e6
 
 BUCKETS = [
@@ -78,9 +77,6 @@ def main() -> None:
     banks = pd.read_parquet(bank_panel_path)
     shocks = pd.read_parquet(shocks_path).iloc[0]
 
-    # -------------------------------------------------
-    # Required columns
-    # -------------------------------------------------
     required_base_cols = [
         "rssd_id_call",
         "Total Asset",
@@ -95,6 +91,7 @@ def main() -> None:
                 f"treasury_{suffix}",
                 f"other_assets_{suffix}",
                 f"res_mtg_{suffix}",
+                f"other_loan_{suffix}",
             ]
         )
 
@@ -106,16 +103,10 @@ def main() -> None:
             + ", ".join(missing)
         )
 
-    # -------------------------------------------------
-    # Clean bank ID
-    # -------------------------------------------------
     banks["rssd_id_call"] = pd.to_numeric(
         banks["rssd_id_call"], errors="coerce"
     ).astype("Int64")
 
-    # -------------------------------------------------
-    # GSIB classification
-    # -------------------------------------------------
     gsib_df = pull_gsib_list()
     gsib_ids = set(
         pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce")
@@ -126,16 +117,10 @@ def main() -> None:
 
     print("GSIB counts:", banks["is_gsib"].value_counts(dropna=False).to_dict())
 
-    # -------------------------------------------------
-    # Size groups
-    # -------------------------------------------------
     banks["size_group"] = "large_non_gsib"
     banks.loc[banks["Total Asset"] < SMALL_CUTOFF, "size_group"] = "small"
     banks.loc[banks["is_gsib"] == 1, "size_group"] = "gsib"
 
-    # -------------------------------------------------
-    # Shocks
-    # -------------------------------------------------
     rmbs_multiplier = float(shocks["rmbs_multiplier"])
 
     print("\nUsing shocks:")
@@ -143,35 +128,30 @@ def main() -> None:
         print(f"  {shock_col} = {float(shocks[shock_col]):.4f}")
     print(f"  rmbs_multiplier = {rmbs_multiplier:.4f}")
 
-    # -------------------------------------------------
-    # Paper-style bucket-based mark-to-market logic
-    # -------------------------------------------------
     banks["loss_rmbs"] = 0.0
     banks["loss_tsy_other"] = 0.0
     banks["loss_res_mtg"] = 0.0
+    banks["loss_other_loan"] = 0.0
 
     for suffix, shock_col in BUCKETS:
         shock = float(shocks[shock_col])
 
-        # RMBS loss: RMBS bucket × treasury bucket shock × RMBS multiplier
         banks["loss_rmbs"] += (
             banks[f"rmbs_{suffix}"].fillna(0) * shock * rmbs_multiplier
         )
 
-        # Residential mortgage loss: res mortgage bucket × treasury bucket shock × RMBS multiplier
         banks["loss_res_mtg"] += (
             banks[f"res_mtg_{suffix}"].fillna(0) * shock * rmbs_multiplier
         )
 
-        # Treasury + other assets loss: treasury bucket + other assets bucket × treasury bucket shock
         banks["loss_tsy_other"] += (
             banks[f"treasury_{suffix}"].fillna(0) * shock
             + banks[f"other_assets_{suffix}"].fillna(0) * shock
         )
 
-    # Keep a fourth category for display consistency with your existing table format
-    # Here "other loan" is already folded into other_assets buckets, so set to zero.
-    banks["loss_other_loan"] = 0.0
+        banks["loss_other_loan"] += (
+            banks[f"other_loan_{suffix}"].fillna(0) * shock
+        )
 
     banks["loss_total"] = (
         banks["loss_rmbs"]
@@ -183,10 +163,11 @@ def main() -> None:
     banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
 
     print("Banks with non-positive mm_assets:", int((banks["mm_assets"] <= 0).sum()))
+    print(
+        "\nLoss sums by channel:\n",
+        banks[["loss_rmbs", "loss_tsy_other", "loss_res_mtg", "loss_other_loan"]].sum()
+    )
 
-    # -------------------------------------------------
-    # Ratios
-    # -------------------------------------------------
     banks["share_rmbs"] = 100 * _safe_div(banks["loss_rmbs"], banks["loss_total"])
     banks["share_tsy_other"] = 100 * _safe_div(
         banks["loss_tsy_other"], banks["loss_total"]
@@ -206,9 +187,6 @@ def main() -> None:
         banks["Uninsured Deposit"], banks["mm_assets"]
     )
 
-    # -------------------------------------------------
-    # Groups
-    # -------------------------------------------------
     groups = {
         "All Banks": banks,
         "Small\n(0, 1.384B)": banks[banks["size_group"] == "small"],
@@ -219,13 +197,11 @@ def main() -> None:
     out_rows = []
     out_index = []
 
-    # Aggregate Loss
     out_index.append("Aggregate Loss")
     out_rows.append(
         {k: _fmt_agg_loss_thousands(df["loss_total"]) for k, df in groups.items()}
     )
 
-    # Bank-Level Loss
     out_index.append("Bank-Level Loss")
     out_rows.append(
         {
@@ -251,7 +227,6 @@ def main() -> None:
         }
     )
 
-    # Shares
     share_map = {
         "Share RMBS": "share_rmbs",
         "Share Treasury and Other": "share_tsy_other",
@@ -275,7 +250,6 @@ def main() -> None:
             }
         )
 
-    # Loss / Asset
     out_index.append("Loss/Asset")
     out_rows.append(
         {
@@ -292,7 +266,6 @@ def main() -> None:
         }
     )
 
-    # Uninsured Deposit / MM Asset
     out_index.append("Uninsured Deposit/MM Asset")
     out_rows.append(
         {
@@ -313,7 +286,6 @@ def main() -> None:
         }
     )
 
-    # Number of Banks
     out_index.append("Number of Banks")
     out_rows.append({k: f"{df.shape[0]:,}" for k, df in groups.items()})
 
