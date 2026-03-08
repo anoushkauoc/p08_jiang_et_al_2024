@@ -282,17 +282,28 @@ print(f"Bank panel saved -> {bank_panel_path}")
 
 #Section 7: Summary stats for assets by bank category
 #Section 7.1: Defining classes for small, large, and GSIB banks
+# Section 7.1: Defining classes for small, large, and GSIB banks
 threshold = 1.384e6  # $1.384 billion in thousands
 
 bank_asset['Bank Category'] = 0
 bank_asset.loc[bank_asset['Total Asset'] >= threshold, 'Bank Category'] = 1
 
-GSIB = [934329,488318,212465,449038,476810,3382547,852218,651448,480228,1443266,
-        413208,3357620,1015560,2980209,214807,304913,670560,2325882,2182786,3066025,
-        398668,541101,229913,1456501,2489805,722777,35301,93619,352745,812164,925411,
-        3212149,451965,688079,1225761,2362458,2531991]
+# Load GSIB IDs from helper module instead of hardcoding here
+gsib_df = pull_gsib_list()
 
-bank_asset.loc[bank_asset.index.isin(GSIB), 'Bank Category'] = 2
+if "rssd_id_call" not in gsib_df.columns:
+    if "rssd_id" in gsib_df.columns:
+        gsib_df = gsib_df.rename(columns={"rssd_id": "rssd_id_call"})
+    else:
+        raise ValueError("GSIB list must contain 'rssd_id_call' or 'rssd_id'.")
+
+gsib_ids = set(
+    pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce")
+    .dropna()
+    .astype(int)
+)
+
+bank_asset.loc[bank_asset.index.isin(gsib_ids), 'Bank Category'] = 2
 
 #Section 7.2: Creating asset summary stats table
 test_df = pd.DataFrame()
