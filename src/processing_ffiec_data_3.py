@@ -404,29 +404,76 @@ test_df = test_df.loc[row_order]
 
 
 #Section 8: Summary stats for liabilities by bank category
+# Section 8: Summary stats for liabilities by bank category
+
 bank_liability = bank_liability.join(bank_asset[['Bank Category']], how='left')
 bank_liability = bank_liability.join(bank_asset[['Total Asset']], how='left')
 
+# Drop duplicated columns just in case
+bank_liability = bank_liability.loc[:, ~bank_liability.columns.duplicated()]
+
+def winsorized_mean_sd(df: pd.DataFrame, asset_col: str = "Total Asset") -> tuple[pd.Series, pd.Series]:
+    """
+    Compute winsorized mean and sd of each liability category as a percent of total assets.
+    Returns (mean_series, sd_series).
+    """
+    if df.empty:
+        cols = [c for c in df.columns if c not in ["Bank Category", asset_col]]
+        empty = pd.Series(index=cols, dtype=float)
+        return empty, empty
+
+    value_cols = [c for c in df.columns if c not in ["Bank Category", asset_col]]
+
+    ratio_df = df[value_cols].div(df[asset_col], axis=0) * 100
+
+    mean_series = ratio_df.apply(
+        lambda x: pd.Series(
+            np.array(winsorize(x.dropna(), limits=[0.05, 0.05])),
+            dtype=float
+        ).mean()
+    )
+
+    sd_series = ratio_df.apply(
+        lambda x: pd.Series(
+            np.array(winsorize(x.dropna(), limits=[0.05, 0.05])),
+            dtype=float
+        ).std()
+    )
+
+    return mean_series, sd_series
+
+
 df2 = pd.DataFrame()
-df2['Aggregate']         = (bank_liability.sum() / bank_liability['Total Asset'].sum()) * 100
-df2['Full sample(mean)'] = (bank_liability.iloc[:, :-1].div(bank_liability['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).mean())
-df2['Full sample(sd)']   = (bank_liability.iloc[:, :-1].div(bank_liability['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).std())
 
-bank_liability_small = bank_liability[bank_liability['Bank Category'] == 0]
-df2['small(mean)'] = (bank_liability_small.iloc[:, :-1].div(bank_liability_small['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).mean())
-df2['small(sd)']   = (bank_liability_small.iloc[:, :-1].div(bank_liability_small['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).std())
+# Aggregate column
+value_cols = [c for c in bank_liability.columns if c not in ["Bank Category", "Total Asset"]]
+df2["Aggregate"] = (bank_liability[value_cols].sum() / bank_liability["Total Asset"].sum()) * 100
 
-bank_liability_large = bank_liability[bank_liability['Bank Category'] == 1]
-df2['large(mean)'] = (bank_liability_large.iloc[:, :-1].div(bank_liability_large['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).mean())
-df2['large(sd)']   = (bank_liability_large.iloc[:, :-1].div(bank_liability_large['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).std())
+# Full sample
+full_mean, full_sd = winsorized_mean_sd(bank_liability)
+df2["Full sample(mean)"] = full_mean
+df2["Full sample(sd)"] = full_sd
 
-bank_liability_GSIB = bank_liability[bank_liability['Bank Category'] == 2]
-df2['GSIB(mean)'] = (bank_liability_GSIB.iloc[:, :-1].div(bank_liability_GSIB['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).mean())
-df2['GSIB(sd)']   = (bank_liability_GSIB.iloc[:, :-1].div(bank_liability_GSIB['Total Asset'], axis=0) * 100).apply(lambda x: pd.Series(np.array(winsorize(x.dropna(), limits=[0.05,0.05])), dtype=float).std())
+# Small banks
+bank_liability_small = bank_liability[bank_liability["Bank Category"] == 0]
+small_mean, small_sd = winsorized_mean_sd(bank_liability_small)
+df2["small(mean)"] = small_mean
+df2["small(sd)"] = small_sd
 
-df2 = df2.drop(index=['Total Asset', 'Bank Category'], errors='ignore')
+# Large banks
+bank_liability_large = bank_liability[bank_liability["Bank Category"] == 1]
+large_mean, large_sd = winsorized_mean_sd(bank_liability_large)
+df2["large(mean)"] = large_mean
+df2["large(sd)"] = large_sd
+
+# GSIB
+bank_liability_GSIB = bank_liability[bank_liability["Bank Category"] == 2]
+gsib_mean, gsib_sd = winsorized_mean_sd(bank_liability_GSIB)
+df2["GSIB(mean)"] = gsib_mean
+df2["GSIB(sd)"] = gsib_sd
+
+df2 = df2.drop(index=["Total Asset", "Bank Category"], errors="ignore")
 df2 = df2.fillna(0).round(1)
-
 
 
 #Section 9: Save summary stats to Excel (two panels: Assets and Liabilities)
