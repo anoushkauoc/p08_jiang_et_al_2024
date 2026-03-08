@@ -270,9 +270,11 @@ def task_tables():
 
 
 def task_charts():
-    """Build chartbook site"""
     return {
-        "actions": ["jupyter-book build docs_src --path-output docs"],
+        "actions": [
+            "jupyter-book build docs_src",
+            "rm -rf docs && cp -R docs_src/_build/html docs",
+        ],
         "targets": ["docs/index.html"],
         "verbosity": 2,
     }
