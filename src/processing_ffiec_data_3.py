@@ -199,7 +199,28 @@ check_cols(rcon_df, domestic_non_rep_loan,  'domestic_non_rep_loan')
 
 print("\nChecking rcfn_df...")
 check_cols(rcfn_df, ['rcfn2200'], 'rcfn2200')
+# ------------------------------------------------------------------
+# Maturity bucket mappings for mark-to-market calculations
+# ------------------------------------------------------------------
 
+# RMBS buckets (example pairing based on your existing ordered list)
+global_rmbs_buckets = {
+    "lt1y":   ['rcfdg301', 'rcfdg303'],
+    "1_3y":   ['rcfdg305', 'rcfdg307'],
+    "3_5y":   ['rcfdg309', 'rcfdg311'],
+    "5_10y":  ['rcfdg313', 'rcfdg315'],
+    "10_15y": ['rcfdg317', 'rcfdg319'],
+    "15plus": ['rcfdg321', 'rcfdg323'],
+}
+
+domestic_rmbs_buckets = {
+    "lt1y":   ['rconht55', 'rconht57'],
+    "1_3y":   ['rcong309', 'rcong311'],
+    "3_5y":   ['rcong313', 'rcong315'],
+    "5_10y":  ['rcong317', 'rcong319'],
+    "10_15y": ['rcong321'],
+    "15plus": ['rcong323'],
+}
 
 
 #Section 5: Creating Asset Table
