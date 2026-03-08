@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from pull_gsib_banks import pull_gsib_list
 
 from settings import config
 DATA_DIR = Path(config("DATA_DIR"))
