@@ -1,0 +1,148 @@
+% !TeX root = paper.tex
+\newcommand*{\PathToOutput}{../_output}
+
+\documentclass[12pt]{article}
+
+\usepackage{my_article_header}
+\usepackage{my_common_header}
+
+\title{Replication of Jiang et al. (2024):\\
+Monetary Tightening and U.S. Bank Fragility}
+
+\author{
+Anoushka Gehani \\
+Hashir Bawany
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\doublespacing
+
+\begin{abstract}
+
+This project replicates key results from Jiang, Matvos, Piskorski, and Seru (2024), 
+which studies the impact of rising interest rates on the U.S. banking system. 
+Using regulatory bank call report data and market price indices, the project 
+reconstructs measures of bank balance sheet exposure to interest rate risk. 
+The analysis reproduces several tables and figures from the original paper 
+and extends them using updated data through 2025. The results confirm that 
+rapid monetary tightening significantly reduced the market value of bank assets 
+and that banks with high shares of uninsured deposits were more vulnerable to 
+deposit runs.
+
+\end{abstract}
+
+\section{Introduction}
+
+In 2022 and 2023 the Federal Reserve implemented one of the fastest monetary 
+tightening cycles in recent decades in response to rising inflation. 
+Rapid increases in interest rates reduced the market value of long-duration 
+assets such as Treasury securities and mortgage-backed securities held by banks.
+
+Jiang et al. (2024) study how these valuation losses affected the stability 
+of the U.S. banking system. Their analysis highlights the interaction between 
+unrealized losses on bank balance sheets and the funding structure of banks, 
+particularly the share of uninsured deposits.
+
+This project replicates several key results from the paper and updates the 
+analysis using more recent regulatory data.
+
+\section{Data}
+
+The primary dataset used in this project is the U.S. bank Call Report, a 
+quarterly regulatory filing submitted by all insured commercial banks to 
+federal regulators through the Federal Financial Institutions Examination 
+Council (FFIEC).
+
+The Call Reports provide detailed balance sheet information including:
+
+\begin{itemize}
+\item total assets and liabilities
+\item loan portfolios
+\item securities holdings
+\item deposit composition
+\end{itemize}
+
+To estimate mark-to-market losses, the project combines these regulatory data 
+with market price series including:
+
+\begin{itemize}
+\item U.S. Treasury yield curves
+\item mortgage-backed securities price indices
+\item macroeconomic data from the FRED database
+\end{itemize}
+
+All data are collected and processed using an automated Python pipeline.
+
+\section{Replication of Paper Results}
+
+This section reproduces the main statistics reported in Jiang et al. (2024). 
+The code reconstructs the bank-level exposure to interest rate shocks and 
+aggregates these exposures across banks.
+
+\begin{table}[h]
+\centering
+\caption{Replication of Table 1}
+\input{\PathToOutput/table1.tex}
+\caption*{Estimated mark-to-market losses across different categories of banks.}
+\end{table}
+
+\section{Updated Results Through 2025}
+
+Using updated Call Report data and market price series, the analysis extends 
+the calculations in the original paper through 2025.
+
+\begin{table}[h]
+\centering
+\caption{Updated Market Value Losses}
+\input{\PathToOutput/table1_updated.tex}
+\caption*{Updated estimates of unrealized losses using data through 2025.}
+\end{table}
+
+\section{Summary Statistics}
+
+To better understand the underlying data, this section provides descriptive 
+statistics on bank balance sheets and asset exposures.
+
+\begin{table}[h]
+\centering
+\caption{Summary Statistics of Bank Balance Sheets}
+\input{\PathToOutput/summary_stats.tex}
+\caption*{Summary statistics of bank assets, securities holdings, and deposit composition.}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{\PathToOutput/bank_asset_distribution.png}
+\caption{Distribution of Bank Asset Exposure}
+\end{figure}
+
+\section{Discussion}
+
+The replication successfully reproduces several key results from the original 
+paper. The results confirm that increases in interest rates led to substantial 
+declines in the market value of bank assets.
+
+Updating the analysis through 2025 shows that exposure to interest rate risk 
+remains significant across many institutions. Banks with higher shares of 
+uninsured deposits appear more vulnerable to rapid deposit withdrawals.
+
+The main challenges in this project involved collecting and cleaning the 
+regulatory call report data and ensuring that the calculations matched the 
+methodology used in the original paper.
+
+\section{Conclusion}
+
+This project demonstrates how reproducible analytical pipelines can be used to 
+replicate complex empirical results in finance. By automating the data collection, 
+cleaning, and analysis steps, the project produces updated estimates of bank 
+fragility that can be easily extended as new data become available.
+
+\bibliographystyle{jpe}
+\bibliography{bibliography.bib}
+
+\end{document}
