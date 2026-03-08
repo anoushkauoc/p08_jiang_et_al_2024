@@ -14,9 +14,8 @@ import sys
 
 
 # Set up data directory & report date
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "_data"
-DATA_DIR.mkdir(exist_ok=True)
+from settings import config
+DATA_DIR = Path(config("DATA_DIR"))
 
 load_dotenv('.env')
 report_date = os.getenv("REPORT_DATE_SLASH")
