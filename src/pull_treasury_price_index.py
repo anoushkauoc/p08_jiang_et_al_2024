@@ -7,7 +7,9 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-DATA_DIR = Path("_data")
+from settings import config
+DATA_DIR = config("DATA_DIR")
+
 SERIES_ID = "NASDAQNCPXT"
 
 def fred_csv_url(series_id: str) -> str:
