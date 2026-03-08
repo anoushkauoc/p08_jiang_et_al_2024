@@ -3,5 +3,7 @@ root: index
 
 chapters:
   - file: charts/repo_rates
+  - file: charts/repo_rates_normalized
+  - file: charts/repo_rates_normalized_w_balance_sheet
   - file: charts/P2.bank_fragility
   - file: charts/P3.bank_losses
