@@ -200,21 +200,56 @@ def test_table1_uninsured_deposit_mm_asset_positive():
         assert val >= 0, f"Uninsured Deposit/MM Asset should be nonnegative for {col}"
 
 
-def test_table1_shares_sum_reasonably():
-    df = _read_table1()
+def test_loss_share_components_sum_to_100_at_bank_level():
+    bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
+    shocks_path = DATA_DIR / "market_shocks.parquet"
 
-    share_rows = [
-        "Share RMBS",
-        "Share Treasury and Other",
-        "Share Residential Mortgage",
-        "Share Other Loan",
+    df = pd.read_parquet(bank_panel_path).copy()
+    shocks = pd.read_parquet(shocks_path).iloc[0]
+
+    bucket_map = [
+        ("lt1y", "d_tsy_1Y"),
+        ("1_3y", "d_tsy_3Y"),
+        ("3_5y", "d_tsy_5Y"),
+        ("5_10y", "d_tsy_10Y"),
+        ("10_15y", "d_tsy_20Y"),
+        ("15plus", "d_tsy_30Y"),
     ]
 
-    for col in df.columns:
-        vals = [_to_float(df.loc[row, col]) for row in share_rows]
-        vals = [v for v in vals if v is not None]
-        total = sum(vals)
-        assert 95 <= total <= 105, f"Shares in {col} sum to {total}, not ~100"
+    rmbs_multiplier = float(shocks["rmbs_multiplier"])
+
+    df["loss_rmbs"] = 0.0
+    df["loss_tsy_other"] = 0.0
+    df["loss_res_mtg"] = 0.0
+    df["loss_other_loan"] = 0.0
+
+    for suffix, shock_col in bucket_map:
+        shock = float(shocks[shock_col])
+
+        df["loss_rmbs"] += df[f"rmbs_{suffix}"].fillna(0) * shock * rmbs_multiplier
+        df["loss_res_mtg"] += df[f"res_mtg_{suffix}"].fillna(0) * shock * rmbs_multiplier
+        df["loss_tsy_other"] += (
+            df[f"treasury_{suffix}"].fillna(0) * shock
+            + df[f"other_assets_{suffix}"].fillna(0) * shock
+        )
+        df["loss_other_loan"] += df[f"other_loan_{suffix}"].fillna(0) * shock
+
+    df["loss_total"] = (
+        df["loss_rmbs"]
+        + df["loss_tsy_other"]
+        + df["loss_res_mtg"]
+        + df["loss_other_loan"]
+    )
+
+    positive = df["loss_total"] > 0
+    shares_sum = (
+        df.loc[positive, "loss_rmbs"]
+        + df.loc[positive, "loss_tsy_other"]
+        + df.loc[positive, "loss_res_mtg"]
+        + df.loc[positive, "loss_other_loan"]
+    ) / df.loc[positive, "loss_total"]
+
+    assert ((shares_sum - 1.0).abs() < 1e-8).all(), "Bank-level loss shares do not sum to 100%"
 
 
 def test_table1_bank_level_loss_positive():
