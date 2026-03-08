@@ -20,8 +20,9 @@ US_GSIB_HC = [
 ]
 
 def pull_gsib_list() -> pd.DataFrame:
-    df = pd.DataFrame(US_GSIB_HC, columns=["name", "rssd_id"])
+    df = pd.DataFrame(US_GSIB_HC, columns=["name", "rssd_id_call"])
     df["is_gsib"] = 1
+    df["year"] = 2023
     return df
 
 def save_gsib_list(df: pd.DataFrame, filename: str = "gsib_list.parquet") -> None:
