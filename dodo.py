@@ -243,7 +243,6 @@ def task_make_table_1():
 # Clean task
 # ---------------------------------------------------------------------
 def task_clean_outputs():
-    """Remove generated output files."""
     files_to_remove = [
         ZIP_FILE,
         BANK_PANEL,
@@ -255,15 +254,10 @@ def task_clean_outputs():
         MARKET_SHOCKS_PARQUET,
         TABLE1_CSV,
         TABLE1_TEX,
-        TABLEA1_CSV,
-        TABLEA1_TEX,
-        FIGUREA1_FINAL,
     ]
 
-    existing = [p for p in files_to_remove if p.exists()]
-
     return {
-        "actions": [(lambda: [p.unlink() for p in existing])],
+        "actions": [f"rm -f {' '.join(str(p) for p in files_to_remove)}"],
         "verbosity": 2,
     }
 
@@ -271,17 +265,14 @@ def task_clean_outputs():
 def task_tables():
     return {
         "actions": ["python src/make_table_1.py"],
-        "targets": ["_output/table1.tex"],
+        "targets": ["_output/table_1.tex"],
     }
 
-def task_summary():
-    return {
-        "actions": ["python src/make_summary_stats.py"],
-        "targets": ["_output/summary_stats.tex"],
-    }
 
 def task_charts():
+    """Build chartbook site"""
     return {
-        "actions": ["python src/make_charts.py"],
-        "targets": ["_output/bank_asset_distribution.png"],
+        "actions": ["jupyter-book build docs_src --path-output docs"],
+        "targets": ["docs/index.html"],
+        "verbosity": 2,
     }
