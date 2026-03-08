@@ -5,7 +5,7 @@ Pipeline:
     1. pull_ffiec_hashir.py         -> downloads FFIEC zip into _data/
     2. processing_ffiec_data_3.py   -> reads zip, writes bank panel and A1-style outputs
     3. pull_gsib_banks.py           -> writes GSIB list parquet
-    4. pull_treasury_price_index.py -> writes Treasury price index parquet
+    4. pull_treasury_yields.py      -> writes Treasury yield parquet
     5. pull_mbs_etfs.py             -> writes MBS ETF parquet
     6. compute_market_shocks.py     -> writes market shock parquet
     7. make_table_1.py              -> writes Table 1 csv/tex
@@ -53,7 +53,7 @@ SUMMARY_XLSX = OUT_DIR / f"summary_stats_{REPORT_DATE}.xlsx"
 FIGURE_A1_PNG = OUT_DIR / f"figure_A1_{REPORT_DATE}.png"
 
 GSIB_PARQUET = DATA_DIR / "gsib_list.parquet"
-TREASURY_PARQUET = DATA_DIR / "treasury_price_index.parquet"
+TREASURY_YIELDS_PARQUET = DATA_DIR / "treasury_yields.parquet"
 MBS_ETF_PARQUET = DATA_DIR / "mbs_etfs.parquet"
 MARKET_SHOCKS_PARQUET = DATA_DIR / "market_shocks.parquet"
 
@@ -86,7 +86,7 @@ DOIT_CONFIG = {
         "pull_ffiec",
         "process_ffiec",
         "pull_gsib",
-        "pull_treasury",
+        "pull_treasury_yields",
         "pull_mbs_etfs",
         "compute_market_shocks",
         "make_table_1",
@@ -139,14 +139,14 @@ def task_pull_gsib():
 
 
 # ---------------------------------------------------------------------
-# Task 4: Pull Treasury price index
+# Task 4: Pull Treasury yields
 # ---------------------------------------------------------------------
-def task_pull_treasury():
-    """Pull Treasury price index used for mark-to-market Treasury shocks."""
+def task_pull_treasury_yields():
+    """Pull Treasury yield data used to construct bucket-specific shocks."""
     return {
-        "actions": [_run("pull_treasury_price_index.py")],
-        "targets": [str(TREASURY_PARQUET)],
-        "uptodate": [lambda: _exists(TREASURY_PARQUET)],
+        "actions": [_run("pull_treasury_yields.py")],
+        "targets": [str(TREASURY_YIELDS_PARQUET)],
+        "uptodate": [lambda: _exists(TREASURY_YIELDS_PARQUET)],
         "verbosity": 2,
         "clean": True,
     }
@@ -156,7 +156,7 @@ def task_pull_treasury():
 # Task 5: Pull MBS ETF prices
 # ---------------------------------------------------------------------
 def task_pull_mbs_etfs():
-    """Pull MBS ETF prices used as RMBS / CMBS proxies."""
+    """Pull MBS ETF prices used for RMBS / CMBS market proxies."""
     return {
         "actions": [_run("pull_mbs_etfs.py")],
         "targets": [str(MBS_ETF_PARQUET)],
@@ -170,11 +170,11 @@ def task_pull_mbs_etfs():
 # Task 6: Compute market shocks
 # ---------------------------------------------------------------------
 def task_compute_market_shocks():
-    """Compute market shocks from Treasury and MBS price data."""
+    """Compute maturity-specific market shocks from Treasury yields and MBS ETF data."""
     return {
         "actions": [_run("compute_market_shocks.py")],
-        "task_dep": ["pull_treasury", "pull_mbs_etfs"],
-        "file_dep": [str(TREASURY_PARQUET), str(MBS_ETF_PARQUET)],
+        "task_dep": ["pull_treasury_yields", "pull_mbs_etfs"],
+        "file_dep": [str(TREASURY_YIELDS_PARQUET), str(MBS_ETF_PARQUET)],
         "targets": [str(MARKET_SHOCKS_PARQUET)],
         "uptodate": [lambda: _exists(MARKET_SHOCKS_PARQUET)],
         "verbosity": 2,
@@ -250,7 +250,7 @@ def task_clean_outputs():
         SUMMARY_XLSX,
         FIGURE_A1_PNG,
         GSIB_PARQUET,
-        TREASURY_PARQUET,
+        TREASURY_YIELDS_PARQUET,
         MBS_ETF_PARQUET,
         MARKET_SHOCKS_PARQUET,
         TABLE1_CSV,
