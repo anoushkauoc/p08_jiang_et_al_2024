@@ -1,5 +1,9 @@
-import pandas as pd
+# ---
+# title: Bank Asset Losses
+# ---
+
 from pathlib import Path
+import pandas as pd
 
 OUTPUT = Path("_output")
 

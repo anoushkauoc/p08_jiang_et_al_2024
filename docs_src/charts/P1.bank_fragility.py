@@ -1,5 +1,9 @@
-import pandas as pd
+# ---
+# title: Bank Fragility Table
+# ---
+
 from pathlib import Path
+import pandas as pd
 
 OUTPUT = Path("_output")
 
