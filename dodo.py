@@ -266,3 +266,22 @@ def task_clean_outputs():
         "actions": [(lambda: [p.unlink() for p in existing])],
         "verbosity": 2,
     }
+
+
+def task_tables():
+    return {
+        "actions": ["python src/make_table_1.py"],
+        "targets": ["_output/table1.tex"],
+    }
+
+def task_summary():
+    return {
+        "actions": ["python src/make_summary_stats.py"],
+        "targets": ["_output/summary_stats.tex"],
+    }
+
+def task_charts():
+    return {
+        "actions": ["python src/make_charts.py"],
+        "targets": ["_output/bank_asset_distribution.png"],
+    }
