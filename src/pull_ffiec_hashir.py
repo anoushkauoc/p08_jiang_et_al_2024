@@ -7,9 +7,10 @@ from pathlib import Path
 import time
 import io
 from dotenv import load_dotenv
+import os
 import sys
 
-sys.stdout.reconfigure(encoding='utf-8')
+#sys.stdout.reconfigure(encoding='utf-8')
 
 
 # Set up data directory & report date
@@ -83,9 +84,9 @@ class FFIECDownloader:
             # Check if requested date exists
             if report_date in available_dates:
                 select_date.select_by_visible_text(report_date)
-                print(f"✓ Selected: {report_date}")
+                print(f"Selected: {report_date}")
             else:
-                print(f"✗ Date {report_date} not available!")
+                print(f"Date {report_date} not available!")
                 print(f"  Using most recent date: {available_dates[0]}")
                 select_date.select_by_index(0)  # Select first (most recent)
             
