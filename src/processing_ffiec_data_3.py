@@ -1,25 +1,23 @@
-#Section 1: Package loading & directory & report date
+# Section 1: Package loading, directories, and report date
 import zipfile
-import io
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats.mstats import winsorize
 from pathlib import Path
-import os
-from dotenv import load_dotenv
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from pull_gsib_banks import pull_gsib_list
 
+from pull_gsib_banks import pull_gsib_list
 from settings import config
+
 DATA_DIR = Path(config("DATA_DIR"))
 OUTPUT_DIR = Path(config("OUTPUT_DIR"))
+REPORT_DATE = config("REPORT_DATE")
 
-load_dotenv('.env')
-
-REPORT_DATE = os.getenv("REPORT_DATE", "03312022")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 ZIP_PATH = DATA_DIR / f"FFIEC CDR Call Bulk All Schedules {REPORT_DATE}.zip"
 if not ZIP_PATH.exists():
@@ -61,32 +59,44 @@ def fmt_dollar(num_thousands):
 
 
 #Section 3: Loading the zip files & creating rcfc, rcon, and rcfn files
+def find_member_name(zf, target_stub: str) -> str:
+    """
+    Find a member in the zip whose filename contains target_stub.
+    """
+    names = zf.namelist()
+    matches = [name for name in names if target_stub.lower() in name.lower()]
+    if not matches:
+        raise FileNotFoundError(
+            f"Could not find '{target_stub}' inside zip.\nAvailable files:\n" +
+            "\n".join(names[:50])
+        )
+    return matches[0]
+
+
 with zipfile.ZipFile(ZIP_PATH) as zf:
-    rc   = read_ffiec(zf, f"FFIEC CDR Call Schedule RC {REPORT_DATE}.txt")
-    rca  = read_ffiec(zf, f"FFIEC CDR Call Schedule RCA {REPORT_DATE}.txt")
-    rcb  = read_multipart(zf, f"FFIEC CDR Call Schedule RCB {REPORT_DATE}", 2)
-    rcci = read_ffiec(zf, f"FFIEC CDR Call Schedule RCCI {REPORT_DATE}.txt")
-    rce  = read_ffiec(zf, f"FFIEC CDR Call Schedule RCE {REPORT_DATE}.txt")
+    rc_name = find_member_name(zf, f"FFIEC CDR Call Schedule RC {REPORT_DATE}")
+    rca_name = find_member_name(zf, f"FFIEC CDR Call Schedule RCA {REPORT_DATE}")
+    rcci_name = find_member_name(zf, f"FFIEC CDR Call Schedule RCCI {REPORT_DATE}")
+    rce_name = find_member_name(zf, f"FFIEC CDR Call Schedule RCE {REPORT_DATE}")
 
-rcfd_df = pd.concat([
-    rc[[c for c in rc.columns if c.startswith('rcfd')]],
-    rca[[c for c in rca.columns if c.startswith('rcfd')]],
-    rcb[[c for c in rcb.columns if c.startswith('rcfd')]],
-    rcci[[c for c in rcci.columns if c.startswith('rcfd')]],
-], axis=1)
+    rc = read_ffiec(zf, rc_name)
+    rca = read_ffiec(zf, rca_name)
+    rcci = read_ffiec(zf, rcci_name)
+    rce = read_ffiec(zf, rce_name)
 
-rcfd_df = rcfd_df.loc[:, ~rcfd_df.columns.duplicated()]
-
-rcon_df = pd.concat([
-    rc[[c for c in rc.columns if c.startswith('rcon')]],
-    rcb[[c for c in rcb.columns if c.startswith('rcon')]],
-    rcci[[c for c in rcci.columns if c.startswith('rcon')]],
-    rce[[c for c in rce.columns if c.startswith('rcon')]],
-], axis=1)
-
-rcon_df = rcon_df.loc[:, ~rcon_df.columns.duplicated()]
-
-rcfn_df = rc[[c for c in rc.columns if c.startswith('rcfn')]]
+    # RCB may be multipart
+    rcb_part_names = [
+        name for name in zf.namelist()
+        if f"FFIEC CDR Call Schedule RCB {REPORT_DATE}".lower() in name.lower()
+    ]
+    if len(rcb_part_names) == 2:
+        rcb = pd.concat([read_ffiec(zf, name) for name in sorted(rcb_part_names)], axis=1)
+    elif len(rcb_part_names) == 1:
+        rcb = read_ffiec(zf, rcb_part_names[0])
+    else:
+        raise FileNotFoundError(
+            f"Could not find RCB files for {REPORT_DATE} in zip."
+        )
 
 
 
