@@ -10,9 +10,9 @@ from settings import config
 
 DATA_DIR = Path(config("DATA_DIR"))
 OUTPUT_DIR = Path(config("OUTPUT_DIR"))
+REPORT_DATE = config("REPORT_DATE")
 
 # Assets are in thousands of dollars
-# $1.384B = 1.384e6 (thousands)
 SMALL_CUTOFF = 1.384e6
 
 
@@ -32,7 +32,7 @@ def _fmt_med_sd(
         return ("", "")
     med = np.nanmedian(v)
     sd = np.nanstd(v, ddof=0)
-    return (f"{med:.{digits}f}{suffix}", f"({sd:.{digits}f})")
+    return (f"{med:.{digits}f}{suffix}", f"({sd:,.{digits}f})")
 
 
 def _fmt_agg_loss_thousands(x: pd.Series) -> str:
@@ -58,14 +58,17 @@ def _winsorize_series(x: pd.Series, p: float = 0.01) -> pd.Series:
 
 
 def main() -> None:
-    # -----------------------------
-    # Load processed bank panel
-    # -----------------------------
-    banks = pd.read_parquet(DATA_DIR / "bank_panel_03312022.parquet")
+    bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
+    shocks_path = DATA_DIR / "market_shocks.parquet"
 
-    # -----------------------------
-    # Required columns check
-    # -----------------------------
+    if not bank_panel_path.exists():
+        raise FileNotFoundError(f"Missing bank panel: {bank_panel_path}")
+    if not shocks_path.exists():
+        raise FileNotFoundError(f"Missing market shocks: {shocks_path}")
+
+    banks = pd.read_parquet(bank_panel_path)
+    shocks = pd.read_parquet(shocks_path).iloc[0]
+
     required_cols = [
         "rssd_id_call",
         "Total Asset",
@@ -87,55 +90,50 @@ def main() -> None:
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    # -----------------------------
-    # Clean bank ID
-    # -----------------------------
     banks["rssd_id_call"] = pd.to_numeric(
         banks["rssd_id_call"], errors="coerce"
     ).astype("Int64")
 
-    # -----------------------------
-    # GSIB list from helper module
-    # -----------------------------
+    # GSIB classification
     gsib_df = pull_gsib_list()
-
-    if "rssd_id_call" not in gsib_df.columns:
-        if "rssd_id" in gsib_df.columns:
-            gsib_df = gsib_df.rename(columns={"rssd_id": "rssd_id_call"})
-        else:
-            raise ValueError("GSIB list must contain 'rssd_id_call' or 'rssd_id'.")
-
     gsib_ids = set(
         pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce")
         .dropna()
         .astype(int)
     )
-
     banks["is_gsib"] = banks["rssd_id_call"].isin(gsib_ids).astype(int)
 
-    print("GSIB counts:", banks["is_gsib"].value_counts().to_dict())
+    print("GSIB counts:", banks["is_gsib"].value_counts(dropna=False).to_dict())
 
-    # -----------------------------
-    # Bank size groups
-    # -----------------------------
+    # Size groups
     banks["size_group"] = "large_non_gsib"
     banks.loc[banks["Total Asset"] < SMALL_CUTOFF, "size_group"] = "small"
     banks.loc[banks["is_gsib"] == 1, "size_group"] = "gsib"
 
-    # -----------------------------
-    # Approximate MTM losses
-    # Placeholder shocks for now
-    # -----------------------------
-    banks["loss_rmbs"] = banks["security_rmbs"].fillna(0) * 0.20
+    treasury_loss = float(shocks["treasury_loss"])
+    rmbs_loss = float(shocks["rmbs_loss"])
+    cmbs_loss = float(shocks["cmbs_loss"])
+    rmbs_multiplier = float(shocks["rmbs_multiplier"])
+
+    print("\nUsing shocks:")
+    print(f"  treasury_loss   = {treasury_loss:.4f}")
+    print(f"  rmbs_loss       = {rmbs_loss:.4f}")
+    print(f"  cmbs_loss       = {cmbs_loss:.4f}")
+    print(f"  rmbs_multiplier = {rmbs_multiplier:.4f}")
+
+    # Real price-based mark-to-market logic
+    banks["loss_rmbs"] = banks["security_rmbs"].fillna(0) * rmbs_loss
 
     banks["loss_tsy_other"] = (
-        banks["security_treasury"].fillna(0)
-        + banks["security_cmbs"].fillna(0)
-        + banks["security_abs"].fillna(0)
-        + banks["security_other"].fillna(0)
-    ) * 0.10
+        banks["security_treasury"].fillna(0) * treasury_loss
+        + banks["security_cmbs"].fillna(0) * cmbs_loss
+        + banks["security_abs"].fillna(0) * treasury_loss
+        + banks["security_other"].fillna(0) * treasury_loss
+    )
 
-    banks["loss_res_mtg"] = banks["Residential_Mortgage"].fillna(0) * 0.20
+    banks["loss_res_mtg"] = (
+        banks["Residential_Mortgage"].fillna(0) * treasury_loss * rmbs_multiplier
+    )
 
     banks["loss_other_loan"] = (
         banks["Commerical_Mortgage"].fillna(0)
@@ -144,7 +142,7 @@ def main() -> None:
         + banks["Comm_Indu_Loan"].fillna(0)
         + banks["Consumer_Loan"].fillna(0)
         + banks["Non_Rep_Loan"].fillna(0)
-    ) * 0.05
+    ) * treasury_loss
 
     banks["loss_total"] = (
         banks["loss_rmbs"]
@@ -153,14 +151,11 @@ def main() -> None:
         + banks["loss_other_loan"]
     )
 
-    # Mark-to-market assets
     banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
 
-    print("Banks with non-positive mm_assets:", (banks["mm_assets"] <= 0).sum())
+    print("Banks with non-positive mm_assets:", int((banks["mm_assets"] <= 0).sum()))
 
-    # -----------------------------
-    # Bank-level ratios
-    # -----------------------------
+    # Ratios
     banks["share_rmbs"] = 100 * _safe_div(banks["loss_rmbs"], banks["loss_total"])
     banks["share_tsy_other"] = 100 * _safe_div(
         banks["loss_tsy_other"], banks["loss_total"]
@@ -180,9 +175,6 @@ def main() -> None:
         banks["Uninsured Deposit"], banks["mm_assets"]
     )
 
-    # -----------------------------
-    # Table groups
-    # -----------------------------
     groups = {
         "All Banks": banks,
         "Small\n(0, 1.384B)": banks[banks["size_group"] == "small"],
@@ -193,13 +185,11 @@ def main() -> None:
     out_rows = []
     out_index = []
 
-    # Aggregate Loss
     out_index.append("Aggregate Loss")
     out_rows.append(
         {k: _fmt_agg_loss_thousands(df["loss_total"]) for k, df in groups.items()}
     )
 
-    # Bank-Level Loss
     out_index.append("Bank-Level Loss")
     out_rows.append(
         {
@@ -225,7 +215,6 @@ def main() -> None:
         }
     )
 
-    # Shares
     share_map = {
         "Share RMBS": "share_rmbs",
         "Share Treasury and Other": "share_tsy_other",
@@ -241,7 +230,6 @@ def main() -> None:
                 for k, df in groups.items()
             }
         )
-
         out_index.append("")
         out_rows.append(
             {
@@ -250,7 +238,6 @@ def main() -> None:
             }
         )
 
-    # Loss/Asset
     out_index.append("Loss/Asset")
     out_rows.append(
         {
@@ -267,7 +254,6 @@ def main() -> None:
         }
     )
 
-    # Uninsured Deposit/MM Asset
     out_index.append("Uninsured Deposit/MM Asset")
     out_rows.append(
         {
@@ -288,31 +274,29 @@ def main() -> None:
         }
     )
 
-    # Number of Banks
     out_index.append("Number of Banks")
     out_rows.append({k: f"{df.shape[0]:,}" for k, df in groups.items()})
 
     table = pd.DataFrame(out_rows, index=out_index)
 
-    # -----------------------------
-    # Save outputs
-    # -----------------------------
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    table.to_csv(OUTPUT_DIR / "table_1.csv")
+    csv_path = OUTPUT_DIR / "table_1.csv"
+    tex_path = OUTPUT_DIR / "table_1.tex"
 
-    try:
-        latex_str = table.to_latex(
-            escape=False,
-            column_format="lcccc",
-        )
-        with open(OUTPUT_DIR / "table_1.tex", "w") as f:
-            f.write(latex_str)
-    except Exception as e:
-        print("LaTeX export skipped:", e)
+    table.to_csv(csv_path)
 
+    latex_str = table.to_latex(
+        escape=False,
+        column_format="lcccc",
+    )
+    with open(tex_path, "w") as f:
+        f.write(latex_str)
+
+    print("\nTable 1:")
     print(table)
-    print("\nSaved ->", OUTPUT_DIR / "table_1.csv")
+    print(f"\nSaved -> {csv_path}")
+    print(f"Saved -> {tex_path}")
 
 
 if __name__ == "__main__":
