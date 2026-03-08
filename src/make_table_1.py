@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
+from pull_gsib_banks import pull_gsib_list
 from settings import config
 
-DATA_DIR = config("DATA_DIR")
-OUTPUT_DIR = config("OUTPUT_DIR")
+DATA_DIR = Path(config("DATA_DIR"))
+OUTPUT_DIR = Path(config("OUTPUT_DIR"))
 
 # Assets are in thousands of dollars
 # $1.384B = 1.384e6 (thousands)
@@ -18,7 +21,12 @@ def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def _fmt_med_sd(x: pd.Series, scale: float = 1.0, digits: int = 1, suffix: str = ""):
+def _fmt_med_sd(
+    x: pd.Series,
+    scale: float = 1.0,
+    digits: int = 1,
+    suffix: str = "",
+) -> tuple[str, str]:
     v = x.dropna() * scale
     if len(v) == 0:
         return ("", "")
@@ -50,11 +58,34 @@ def _winsorize_series(x: pd.Series, p: float = 0.01) -> pd.Series:
 
 
 def main() -> None:
-
     # -----------------------------
     # Load processed bank panel
     # -----------------------------
     banks = pd.read_parquet(DATA_DIR / "bank_panel_03312022.parquet")
+
+    # -----------------------------
+    # Required columns check
+    # -----------------------------
+    required_cols = [
+        "rssd_id_call",
+        "Total Asset",
+        "Uninsured Deposit",
+        "security_rmbs",
+        "security_treasury",
+        "security_cmbs",
+        "security_abs",
+        "security_other",
+        "Residential_Mortgage",
+        "Commerical_Mortgage",
+        "Other_Real_Estate_Mortgage",
+        "Agri_Loan",
+        "Comm_Indu_Loan",
+        "Consumer_Loan",
+        "Non_Rep_Loan",
+    ]
+    missing = [c for c in required_cols if c not in banks.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
 
     # -----------------------------
     # Clean bank ID
@@ -64,17 +95,23 @@ def main() -> None:
     ).astype("Int64")
 
     # -----------------------------
-    # GSIB list (from FFIEC script)
+    # GSIB list from helper module
     # -----------------------------
-    GSIB_IDS = [
-        934329, 488318, 212465, 449038, 476810, 3382547, 852218, 651448,
-        480228, 1443266, 413208, 3357620, 1015560, 2980209, 214807, 304913,
-        670560, 2325882, 2182786, 3066025, 398668, 541101, 229913, 1456501,
-        2489805, 722777, 35301, 93619, 352745, 812164, 925411, 3212149,
-        451965, 688079, 1225761, 2362458, 2531991
-    ]
+    gsib_df = pull_gsib_list()
 
-    banks["is_gsib"] = banks["rssd_id_call"].isin(GSIB_IDS).astype(int)
+    if "rssd_id_call" not in gsib_df.columns:
+        if "rssd_id" in gsib_df.columns:
+            gsib_df = gsib_df.rename(columns={"rssd_id": "rssd_id_call"})
+        else:
+            raise ValueError("GSIB list must contain 'rssd_id_call' or 'rssd_id'.")
+
+    gsib_ids = set(
+        pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce")
+        .dropna()
+        .astype(int)
+    )
+
+    banks["is_gsib"] = banks["rssd_id_call"].isin(gsib_ids).astype(int)
 
     print("GSIB counts:", banks["is_gsib"].value_counts().to_dict())
 
@@ -82,13 +119,12 @@ def main() -> None:
     # Bank size groups
     # -----------------------------
     banks["size_group"] = "large_non_gsib"
-
     banks.loc[banks["Total Asset"] < SMALL_CUTOFF, "size_group"] = "small"
     banks.loc[banks["is_gsib"] == 1, "size_group"] = "gsib"
 
     # -----------------------------
     # Approximate MTM losses
-    # (placeholder shocks)
+    # Placeholder shocks for now
     # -----------------------------
     banks["loss_rmbs"] = banks["security_rmbs"].fillna(0) * 0.20
 
@@ -119,6 +155,8 @@ def main() -> None:
 
     # Mark-to-market assets
     banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
+
+    print("Banks with non-positive mm_assets:", (banks["mm_assets"] <= 0).sum())
 
     # -----------------------------
     # Bank-level ratios
@@ -259,12 +297,17 @@ def main() -> None:
     # -----------------------------
     # Save outputs
     # -----------------------------
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     table.to_csv(OUTPUT_DIR / "table_1.csv")
 
     try:
-        table.to_latex(OUTPUT_DIR / "table_1.tex", escape=False)
+        latex_str = table.to_latex(
+            escape=False,
+            column_format="lcccc",
+        )
+        with open(OUTPUT_DIR / "table_1.tex", "w") as f:
+            f.write(latex_str)
     except Exception as e:
         print("LaTeX export skipped:", e)
 
