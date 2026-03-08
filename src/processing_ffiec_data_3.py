@@ -12,12 +12,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "_data"
-DATA_DIR.mkdir(exist_ok=True)
-
-OUTPUT_DIR = BASE_DIR / "_output"
-OUTPUT_DIR.mkdir(exist_ok=True)
+from settings import config
+DATA_DIR = Path(config("DATA_DIR"))
+OUTPUT_DIR = Path(config("OUTPUT_DIR"))
 
 load_dotenv('.env')
 
