@@ -1,15 +1,9 @@
 """
 Load project configurations from .env files or from the command line.
 
-Provides easy access to paths and credentials used in the project.
-Meant to be used as an imported module.
-
-If `settings.py` is run on its own, it will create the appropriate
-directories.
-
 Configuration precedence:
     1. Command line arguments
-    2. Environment variables / .env file
+    2. Environment variables / .env
     3. settings.py defaults
     4. Inline default passed to config()
 """
@@ -25,22 +19,16 @@ from decouple import config as _config
 
 
 def find_all_caps_cli_vars(argv=sys.argv):
-    """Find all ALL_CAPS command line arguments passed like:
-    --DATA_DIR=/path/to/data
-    or
-    --DATA_DIR /path/to/data
-    """
+    """Find ALL_CAPS command line arguments like --DATA_DIR=/path or --DATA_DIR /path."""
     result = {}
     i = 0
     while i < len(argv):
         arg = argv[i]
 
-        # Handle --VAR=value
         if arg.startswith("--") and "=" in arg and arg[2:].split("=")[0].isupper():
             var_name, value = arg[2:].split("=", 1)
             result[var_name] = value
 
-        # Handle --VAR value
         elif arg.startswith("--") and arg[2:].isupper() and i + 1 < len(argv):
             var_name = arg[2:]
             value = argv[i + 1]
@@ -55,9 +43,6 @@ def find_all_caps_cli_vars(argv=sys.argv):
 cli_vars = find_all_caps_cli_vars()
 
 
-# ---------------------------------------------------------------------
-# Base helpers
-# ---------------------------------------------------------------------
 def get_os() -> str:
     os_name = system()
     if os_name == "Windows":
@@ -68,7 +53,6 @@ def get_os() -> str:
 
 
 def get_stata_exe(os_type: str) -> str:
-    """Get the name of the Stata executable based on the OS type."""
     if os_type == "windows":
         return "StataMP-64.exe"
     if os_type == "nix":
@@ -77,16 +61,12 @@ def get_stata_exe(os_type: str) -> str:
 
 
 def if_relative_make_abs(path: Path, base_dir: Path) -> Path:
-    """If path is relative, make it absolute relative to project root."""
     path = Path(path)
     if path.is_absolute():
         return path.resolve()
     return (base_dir / path).resolve()
 
 
-# ---------------------------------------------------------------------
-# Core defaults
-# ---------------------------------------------------------------------
 if "BASE_DIR" in cli_vars:
     BASE_DIR_DEFAULT = Path(cli_vars["BASE_DIR"]).resolve()
 else:
@@ -104,7 +84,6 @@ else:
 
 
 defaults = {
-    # Project structure
     "BASE_DIR": BASE_DIR_DEFAULT,
     "OS_TYPE": OS_TYPE_DEFAULT,
     "STATA_EXE": STATA_EXE_DEFAULT,
@@ -113,13 +92,17 @@ defaults = {
     "OUTPUT_DIR": if_relative_make_abs(Path("_output"), BASE_DIR_DEFAULT),
     "SRC_DIR": if_relative_make_abs(Path("src"), BASE_DIR_DEFAULT),
 
-    # Dates
-    "START_DATE": datetime.strptime("1913-01-01", "%Y-%m-%d"),
-    "END_DATE": datetime.strptime("2025-12-31", "%Y-%m-%d"),
+    # Project-wide time range
+    "START_DATE": "1913-01-01",
+    "END_DATE": "2025-12-31",
 
-    # FFIEC project-specific settings
-    "REPORT_DATE": "03312022",
-    "REPORT_DATE_SLASH": "03/31/2022",
+    # FFIEC reporting date
+    "REPORT_DATE": "12312025",
+    "REPORT_DATE_SLASH": "12/31/2025",
+
+    # Market shock window
+    "MARKET_START_DATE": "2025-09-30",
+    "MARKET_END_DATE": "2025-12-31",
 }
 
 
@@ -136,10 +119,9 @@ def config(
         1. Command line arguments
         2. Environment variables / .env
         3. settings.py defaults
-        4. Inline default passed to config()
+        4. Inline default
     """
 
-    # 1. Command line arguments
     if var_name in cli_vars and cli_vars[var_name] is not None:
         value = cli_vars[var_name]
         if cast is not None:
@@ -148,7 +130,6 @@ def config(
             value = if_relative_make_abs(Path(value), settings_py_defaults["BASE_DIR"])
         return value
 
-    # 2. Environment variables / .env
     env_sentinel = object()
     env_value = _config(var_name, default=env_sentinel)
     if env_value is not env_sentinel:
@@ -160,14 +141,12 @@ def config(
             )
         return env_value
 
-    # 3. settings.py defaults
     if var_name in settings_py_defaults:
         value = settings_py_defaults[var_name]
         if cast is not None and not isinstance(value, Path):
             value = cast(value)
         return value
 
-    # 4. Inline default
     if default is not None:
         value = default
         if cast is not None:
@@ -198,3 +177,5 @@ if __name__ == "__main__":
     print(f"OUTPUT_DIR: {config('OUTPUT_DIR')}")
     print(f"REPORT_DATE: {config('REPORT_DATE')}")
     print(f"REPORT_DATE_SLASH: {config('REPORT_DATE_SLASH')}")
+    print(f"MARKET_START_DATE: {config('MARKET_START_DATE')}")
+    print(f"MARKET_END_DATE: {config('MARKET_END_DATE')}")
