@@ -67,3 +67,42 @@ path_to_html_chart = "./_output/repo_rates.html"
 path_to_excel_chart = "./src/repo_rates.xlsx"
 chart_docs_path = "./docs_src/charts/repo_rates.md"
 
+
+[charts.bank_fragility]
+chart_name = "Bank Fragility"
+short_description_chart = "Replication of Jiang et al. (2024) Table 1 showing bank fragility measures."
+dataframe_id = "repo_public"
+topic_tags = ["Banking", "Fragility"]
+data_series_start_date = "2022"
+data_frequency = "Quarterly"
+observation_period = "Quarter"
+lag_in_data_release = "None"
+data_release_dates = "Quarterly"
+seasonal_adjustment = "None"
+units = "USD"
+data_series = ""
+mnemonic = ""
+path_to_html_chart = "./_output/table_1.csv"
+path_to_excel_chart = ""
+chart_docs_path = "./docs_src/charts/P1.bank_fragility.md"
+
+
+
+
+[charts.bank_losses]
+chart_name = "Bank Asset Losses"
+short_description_chart = "Estimated bank asset losses from interest rate shocks."
+dataframe_id = "repo_public"
+topic_tags = ["Banking", "Interest Rates"]
+data_series_start_date = "2022"
+data_frequency = "Quarterly"
+observation_period = "Quarter"
+lag_in_data_release = "None"
+data_release_dates = "Quarterly"
+seasonal_adjustment = "None"
+units = "USD"
+data_series = ""
+mnemonic = ""
+path_to_html_chart = "./_output/figure_A1_12312025.png"
+path_to_excel_chart = ""
+chart_docs_path = "./docs_src/charts/P2.bank_losses.md"
