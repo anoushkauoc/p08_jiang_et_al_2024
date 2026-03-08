@@ -222,9 +222,8 @@ domestic_rmbs_buckets = {
     "15plus": ['rcong323'],
 }
 
-
-#Section 5: Creating Asset Table
-#Section 5.1: Grouping into broader asset categories
+# Section 5: Creating Asset Table
+# Section 5.1: Grouping into broader asset categories
 rcfd_data = pd.DataFrame(index=rcfd_df.index)
 rcfd_data['Total Asset']          = rcfd_df['rcfd2170']
 rcfd_data['cash']                 = rcfd_df['rcfd0010']
@@ -267,7 +266,6 @@ rcon_data['Non_Rep_Loan']         = rcon_df[domestic_non_rep_loan].sum(axis=1)
 rcon_data['Fed_Fund_Sold']        = rcon_df['rconb987']
 rcon_data['Reverse_Repo']         = rcon_df['rconb989']
 
-
 # ------------------------------------------------------------------
 # Bucketed RMBS exposures for mark-to-market logic
 # ------------------------------------------------------------------
@@ -279,13 +277,9 @@ for bucket, cols in domestic_rmbs_buckets.items():
     existing_cols = [c for c in cols if c in rcon_df.columns]
     rcon_data[f"rmbs_{bucket}"] = rcon_df[existing_cols].sum(axis=1) if existing_cols else 0
 
-
-
 # ------------------------------------------------------------------
 # Temporary bucket allocation for Treasury / other assets / mortgages
-# These are placeholders until exact FFIEC maturity mappings are added.
 # ------------------------------------------------------------------
-
 bucket_names = ["lt1y", "1_3y", "3_5y", "5_10y", "10_15y", "15plus"]
 
 for bucket in bucket_names:
@@ -298,7 +292,6 @@ for bucket in bucket_names:
     rcon_data[f"res_mtg_{bucket}"] = 0.0
 
 # Coarse fallback: put current aggregates into the longest bucket
-# until exact repricing/maturity columns are wired in
 rcfd_data["treasury_15plus"] = rcfd_data["security_treasury"]
 rcfd_data["other_assets_15plus"] = (
     rcfd_data["security_cmbs"]
@@ -327,21 +320,28 @@ rcon_data["other_assets_15plus"] = (
 )
 rcon_data["res_mtg_15plus"] = rcon_data["Residential_Mortgage"]
 
-#Section 5.2: Merging rcfd and rcon to create asset tables
-bank_asset = pd.merge(rcfd_data, rcon_data, left_index=True, right_index=True,
-                      how='outer', suffixes=('', '_df2'))
+# Section 5.2: Merging rcfd and rcon to create asset tables
+bank_asset = pd.merge(
+    rcfd_data,
+    rcon_data,
+    left_index=True,
+    right_index=True,
+    how="outer",
+    suffixes=("", "_df2"),
+)
 
-replace_index = bank_asset[bank_asset['cash'].isna()].index
-bank_asset.loc[replace_index, bank_asset.columns[:19]] = bank_asset.loc[replace_index, bank_asset.columns[19:]].values
-bank_asset.drop(columns='Non_Rep_Loan', inplace=True)
-bank_asset.rename(columns={'Non_Rep_Loan_df2': 'Non_Rep_Loan'}, inplace=True)
-columns_to_drop = [col for col in bank_asset.columns if '_df2' in col]
-bank_asset.drop(columns=columns_to_drop, inplace=True)
+df2_cols = [c for c in bank_asset.columns if c.endswith("_df2")]
+
+for col_df2 in df2_cols:
+    col = col_df2.replace("_df2", "")
+    if col in bank_asset.columns:
+        bank_asset[col] = bank_asset[col].fillna(bank_asset[col_df2])
+
+bank_asset = bank_asset.drop(columns=df2_cols)
 
 
-
-#Section 6: Creating liability tables
-#Section 6.1: Grouping into broader liability categories
+# Section 6: Creating liability tables
+# Section 6.1: Grouping into broader liability categories
 global_liability = pd.DataFrame(index=rcon_df.index)
 global_liability['Total Liability']                    = rcfd_df['rcfd2948']
 global_liability['Domestic Deposit']                   = rcon_df['rcon2200']
@@ -376,23 +376,24 @@ domestic_liability['Common Stock']                       = rcon_df['rcon3230']
 domestic_liability['Preferred Stock']                    = rcon_df['rcon3838']
 domestic_liability['Retained Earning']                   = rcon_df['rcon3632']
 
-#Section 6.2: Merging global and domestic liability tables
-bank_liability = pd.merge(global_liability, domestic_liability, left_index=True, right_index=True,
-                          how='outer', suffixes=('', '_df2'))
-replace_index = bank_liability[bank_liability['Total Liability'].isna()].index
-bank_liability.loc[replace_index, bank_liability.columns[:15]] = bank_liability.loc[replace_index, bank_liability.columns[15:]].values
-columns_to_drop = [col for col in bank_liability.columns if '_df2' in col]
-bank_liability.drop(columns=columns_to_drop, inplace=True)
+# Section 6.2: Merging global and domestic liability tables
+bank_liability = pd.merge(
+    global_liability,
+    domestic_liability,
+    left_index=True,
+    right_index=True,
+    how="outer",
+    suffixes=("", "_df2"),
+)
 
-bank_panel = bank_asset.join(bank_liability, how="outer", rsuffix="_liab")
-bank_panel = bank_panel.reset_index().rename(columns={"rssd9001": "rssd_id_call"})
-bank_panel["report_date"] = REPORT_DATE
+df2_cols = [c for c in bank_liability.columns if c.endswith("_df2")]
 
-bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
-bank_panel.to_parquet(bank_panel_path, index=False)
+for col_df2 in df2_cols:
+    col = col_df2.replace("_df2", "")
+    if col in bank_liability.columns:
+        bank_liability[col] = bank_liability[col].fillna(bank_liability[col_df2])
 
-print(f"Bank panel saved -> {bank_panel_path}")
-
+bank_liability = bank_liability.drop(columns=df2_cols)
 #Section 7: Summary stats for assets by bank category
 #Section 7.1: Defining classes for small, large, and GSIB banks
 # Section 7.1: Defining classes for small, large, and GSIB banks
