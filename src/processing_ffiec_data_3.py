@@ -267,6 +267,66 @@ rcon_data['Non_Rep_Loan']         = rcon_df[domestic_non_rep_loan].sum(axis=1)
 rcon_data['Fed_Fund_Sold']        = rcon_df['rconb987']
 rcon_data['Reverse_Repo']         = rcon_df['rconb989']
 
+
+# ------------------------------------------------------------------
+# Bucketed RMBS exposures for mark-to-market logic
+# ------------------------------------------------------------------
+for bucket, cols in global_rmbs_buckets.items():
+    existing_cols = [c for c in cols if c in rcfd_df.columns]
+    rcfd_data[f"rmbs_{bucket}"] = rcfd_df[existing_cols].sum(axis=1) if existing_cols else 0
+
+for bucket, cols in domestic_rmbs_buckets.items():
+    existing_cols = [c for c in cols if c in rcon_df.columns]
+    rcon_data[f"rmbs_{bucket}"] = rcon_df[existing_cols].sum(axis=1) if existing_cols else 0
+
+
+
+# ------------------------------------------------------------------
+# Temporary bucket allocation for Treasury / other assets / mortgages
+# These are placeholders until exact FFIEC maturity mappings are added.
+# ------------------------------------------------------------------
+
+bucket_names = ["lt1y", "1_3y", "3_5y", "5_10y", "10_15y", "15plus"]
+
+for bucket in bucket_names:
+    rcfd_data[f"treasury_{bucket}"] = 0.0
+    rcfd_data[f"other_assets_{bucket}"] = 0.0
+    rcfd_data[f"res_mtg_{bucket}"] = 0.0
+
+    rcon_data[f"treasury_{bucket}"] = 0.0
+    rcon_data[f"other_assets_{bucket}"] = 0.0
+    rcon_data[f"res_mtg_{bucket}"] = 0.0
+
+# Coarse fallback: put current aggregates into the longest bucket
+# until exact repricing/maturity columns are wired in
+rcfd_data["treasury_15plus"] = rcfd_data["security_treasury"]
+rcfd_data["other_assets_15plus"] = (
+    rcfd_data["security_cmbs"]
+    + rcfd_data["security_abs"]
+    + rcfd_data["security_other"]
+    + rcfd_data["Commerical_Mortgage"]
+    + rcfd_data["Other_Real_Estate_Mortgage"]
+    + rcfd_data["Agri_Loan"]
+    + rcfd_data["Comm_Indu_Loan"]
+    + rcfd_data["Consumer_Loan"]
+    + rcfd_data["Non_Rep_Loan"].fillna(0)
+)
+rcfd_data["res_mtg_15plus"] = rcfd_data["Residential_Mortgage"]
+
+rcon_data["treasury_15plus"] = rcon_data["security_treasury"]
+rcon_data["other_assets_15plus"] = (
+    rcon_data["security_cmbs"]
+    + rcon_data["security_abs"]
+    + rcon_data["security_other"]
+    + rcon_data["Commerical_Mortgage"]
+    + rcon_data["Other_Real_Estate_Mortgage"]
+    + rcon_data["Agri_Loan"]
+    + rcon_data["Comm_Indu_Loan"]
+    + rcon_data["Consumer_Loan"]
+    + rcon_data["Non_Rep_Loan"].fillna(0)
+)
+rcon_data["res_mtg_15plus"] = rcon_data["Residential_Mortgage"]
+
 #Section 5.2: Merging rcfd and rcon to create asset tables
 bank_asset = pd.merge(rcfd_data, rcon_data, left_index=True, right_index=True,
                       how='outer', suffixes=('', '_df2'))
