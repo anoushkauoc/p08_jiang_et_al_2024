@@ -1,4 +1,5 @@
-"""Load project configurations from .env files or from the command line.
+"""
+Load project configurations from .env files or from the command line.
 
 Provides easy access to paths and credentials used in the project.
 Meant to be used as an imported module.
@@ -6,40 +7,14 @@ Meant to be used as an imported module.
 If `settings.py` is run on its own, it will create the appropriate
 directories.
 
-For information about the rationale behind decouple and this module,
-see https://pypi.org/project/python-decouple/
-
-Note that decouple mentions that it will help to ensure that
-the project has "only one configuration module to rule all your instances."
-This is achieved by putting all the configuration into the `.env` file.
-You can have different sets of variables for difference instances,
-such as `.env.development` or `.env.production`. You would only
-need to copy over the settings from one into `.env` to switch
-over to the other configuration, for example.
-
-
-Example
--------
-Create a file called `myexample.py` with the following content:
-```
-from settings import config
-DATA_DIR = config("DATA_DIR")
-
-print(f"Using DATA_DIR: {DATA_DIR}")
-```
-and run
-```
->>> python myexample.py --DATA_DIR=/path/to/data
-/path/to/data
-```
-and compare to
-```
->>> export DATA_DIR=/path/to/other
->>> python myexample.py
-/path/to/other
-```
-
+Configuration precedence:
+    1. Command line arguments
+    2. Environment variables / .env file
+    3. settings.py defaults
+    4. Inline default passed to config()
 """
+
+from __future__ import annotations
 
 import sys
 from datetime import datetime
@@ -50,136 +25,101 @@ from decouple import config as _config
 
 
 def find_all_caps_cli_vars(argv=sys.argv):
-    """Find all command line arguments that are all caps.
-
-    Find all command line arguments that are all caps and defined
-    with a long option, for example, --DATA_DIR or --MANUAL_DATA_DIR.
-    When that option is found, the value of the option is returned.
-
-    For example, if the command line is:
-    ```
-    python settings.py --DATA_DIR=/path/to/data --MANUAL_DATA_DIR=/path/to/manual_data
-    ```
-    Then the function will return:
-    ```
-    {'DATA_DIR': '/path/to/data', 'MANUAL_DATA_DIR': '/path/to/manual_data'}
-    ```
-
-    For example:
-    ```
-    >>> argv = [
-        '/opt/homebrew/Caskroom/mambaforge/base/envs/ftsf/lib/python3.12/site-packages/ipykernel_launcher.py',
-        '--f=/Users/jbejarano/Library/Jupyter/runtime/kernel-v37ea18e94713e364855d5610175b766ee99909eab.json',
-        '--DATA_DIR=/path/to/data',
-        '--MANUAL_DATA_DIR=/path/to/manual_data'
-    ]
-    >>> cli_vars = find_all_caps_cli_vars(argv)
-    >>> cli_vars
-    {'DATA_DIR': '/path/to/data', 'MANUAL_DATA_DIR': '/path/to/manual_data'}
-    ```
+    """Find all ALL_CAPS command line arguments passed like:
+    --DATA_DIR=/path/to/data
+    or
+    --DATA_DIR /path/to/data
     """
     result = {}
     i = 0
     while i < len(argv):
         arg = argv[i]
-        # Handle --VAR=value format
+
+        # Handle --VAR=value
         if arg.startswith("--") and "=" in arg and arg[2:].split("=")[0].isupper():
             var_name, value = arg[2:].split("=", 1)
             result[var_name] = value
-        # Handle --VAR value format (where value is the next argument)
+
+        # Handle --VAR value
         elif arg.startswith("--") and arg[2:].isupper() and i + 1 < len(argv):
             var_name = arg[2:]
             value = argv[i + 1]
-            # Only use this value if it doesn't look like another option
             if not value.startswith("--"):
                 result[var_name] = value
-                i += 1  # Skip the next argument since we used it as a value
+                i += 1
+
         i += 1
     return result
 
 
 cli_vars = find_all_caps_cli_vars()
 
-########################################################
-## Define defaults
-########################################################
-defaults = {}
 
-# Absolute path to root directory of the project
-if "BASE_DIR" in cli_vars:
-    defaults["BASE_DIR"] = Path(cli_vars["BASE_DIR"])
-else:
-    defaults["BASE_DIR"] = Path(__file__).absolute().parent.parent
-
-
-# OS type
-def get_os():
+# ---------------------------------------------------------------------
+# Base helpers
+# ---------------------------------------------------------------------
+def get_os() -> str:
     os_name = system()
     if os_name == "Windows":
         return "windows"
-    elif os_name == "Darwin":
+    if os_name in {"Darwin", "Linux"}:
         return "nix"
-    elif os_name == "Linux":
-        return "nix"
-    else:
-        return "unknown"
+    return "unknown"
 
 
-if "OS_TYPE" in cli_vars:
-    defaults["OS_TYPE"] = cli_vars["OS_TYPE"]
-else:
-    defaults["OS_TYPE"] = get_os()
-
-
-## Stata executable
-def get_stata_exe():
+def get_stata_exe(os_type: str) -> str:
     """Get the name of the Stata executable based on the OS type."""
-    if defaults["OS_TYPE"] == "windows":
+    if os_type == "windows":
         return "StataMP-64.exe"
-    elif defaults["OS_TYPE"] == "nix":
+    if os_type == "nix":
         return "stata-mp"
-    else:
-        raise ValueError("Unknown OS type")
+    raise ValueError("Unknown OS type")
 
 
-if "STATA_EXE" in cli_vars:
-    defaults["STATA_EXE"] = cli_vars["STATA_EXE"]
-else:
-    defaults["STATA_EXE"] = get_stata_exe()
-
-## Dates
-defaults["START_DATE"] = datetime.strptime("1913-01-01", "%Y-%m-%d")
-defaults["END_DATE"] = datetime.strptime("2024-12-31", "%Y-%m-%d")
-
-
-## File paths
-def if_relative_make_abs(path):
-    """If a relative path is given, make it absolute, assuming
-    that it is relative to the project root directory (BASE_DIR)
-
-    Example
-    -------
-    ```
-    >>> if_relative_make_abs(Path('_data'))
-    WindowsPath('C:/Users/jdoe/GitRepositories/cookiecutter_chartbook/_data')
-
-    >>> if_relative_make_abs(Path("C:/Users/jdoe/GitRepositories/cookiecutter_chartbook/_output"))
-    WindowsPath('C:/Users/jdoe/GitRepositories/cookiecutter_chartbook/_output')
-    ```
-    """
+def if_relative_make_abs(path: Path, base_dir: Path) -> Path:
+    """If path is relative, make it absolute relative to project root."""
     path = Path(path)
     if path.is_absolute():
-        abs_path = path.resolve()
-    else:
-        abs_path = (defaults["BASE_DIR"] / path).resolve()
-    return abs_path
+        return path.resolve()
+    return (base_dir / path).resolve()
+
+
+# ---------------------------------------------------------------------
+# Core defaults
+# ---------------------------------------------------------------------
+if "BASE_DIR" in cli_vars:
+    BASE_DIR_DEFAULT = Path(cli_vars["BASE_DIR"]).resolve()
+else:
+    BASE_DIR_DEFAULT = Path(__file__).absolute().parent.parent
+
+if "OS_TYPE" in cli_vars:
+    OS_TYPE_DEFAULT = cli_vars["OS_TYPE"]
+else:
+    OS_TYPE_DEFAULT = get_os()
+
+if "STATA_EXE" in cli_vars:
+    STATA_EXE_DEFAULT = cli_vars["STATA_EXE"]
+else:
+    STATA_EXE_DEFAULT = get_stata_exe(OS_TYPE_DEFAULT)
 
 
 defaults = {
-    "DATA_DIR": if_relative_make_abs(Path("_data")),
-    "MANUAL_DATA_DIR": if_relative_make_abs(Path("data_manual")),
-    "OUTPUT_DIR": if_relative_make_abs(Path("_output")),
-    **defaults,
+    # Project structure
+    "BASE_DIR": BASE_DIR_DEFAULT,
+    "OS_TYPE": OS_TYPE_DEFAULT,
+    "STATA_EXE": STATA_EXE_DEFAULT,
+    "DATA_DIR": if_relative_make_abs(Path("_data"), BASE_DIR_DEFAULT),
+    "MANUAL_DATA_DIR": if_relative_make_abs(Path("data_manual"), BASE_DIR_DEFAULT),
+    "OUTPUT_DIR": if_relative_make_abs(Path("_output"), BASE_DIR_DEFAULT),
+    "SRC_DIR": if_relative_make_abs(Path("src"), BASE_DIR_DEFAULT),
+
+    # Dates
+    "START_DATE": datetime.strptime("1913-01-01", "%Y-%m-%d"),
+    "END_DATE": datetime.strptime("2025-12-31", "%Y-%m-%d"),
+
+    # FFIEC project-specific settings
+    "REPORT_DATE": "03312022",
+    "REPORT_DATE_SLASH": "03/31/2022",
 }
 
 
@@ -191,63 +131,70 @@ def config(
     cli_vars=cli_vars,
     convert_dir_vars_to_abs_path=True,
 ):
-    """Config defines a variable that can be used in the project. The definition of variables follows
-    an order of precedence:
-    1. Command line arguments
-    2. Environment variables
-    3. Settings.py file
-    4. Defaults defined in-line in the local file
-    5. Error
+    """
+    Read configuration variable with precedence:
+        1. Command line arguments
+        2. Environment variables / .env
+        3. settings.py defaults
+        4. Inline default passed to config()
     """
 
-    # 1. Command line arguments (highest priority)
+    # 1. Command line arguments
     if var_name in cli_vars and cli_vars[var_name] is not None:
         value = cli_vars[var_name]
-        # Apply cast if provided
         if cast is not None:
             value = cast(value)
         if "DIR" in var_name and convert_dir_vars_to_abs_path:
-            value = if_relative_make_abs(Path(value))
+            value = if_relative_make_abs(Path(value), settings_py_defaults["BASE_DIR"])
         return value
 
-    # 2. Environment variables through decouple
-    # Use decouple but with a sentinel default to detect if it was found
+    # 2. Environment variables / .env
     env_sentinel = object()
     env_value = _config(var_name, default=env_sentinel)
     if env_value is not env_sentinel:
-        # Found in environment
         if cast is not None:
             env_value = cast(env_value)
         if "DIR" in var_name and convert_dir_vars_to_abs_path:
-            env_value = if_relative_make_abs(Path(env_value))
+            env_value = if_relative_make_abs(
+                Path(env_value), settings_py_defaults["BASE_DIR"]
+            )
         return env_value
 
-    # 3. Settings.py defaults dictionary
-    if var_name in defaults:
-        default_value = defaults[var_name]
-        # If default_value is directly usable (not a dict with metadata)
-        if cast is not None:
-            default_value = cast(default_value)
-        return default_value
+    # 3. settings.py defaults
+    if var_name in settings_py_defaults:
+        value = settings_py_defaults[var_name]
+        if cast is not None and not isinstance(value, Path):
+            value = cast(value)
+        return value
 
-    # 4. Use the default value provided in the local file. Error if not found
-    try:
-        return _config(var_name, default=default, cast=cast)
-    except Exception as e:
-        raise ValueError(
-            f"Configuration variable '{var_name}' is not defined. "
-            f"Please set it via:\n"
-            f"  1. Command line: --{var_name}=value\n"
-            f"  2. Environment variable: export {var_name}=value\n"
-            f"  3. .env file: {var_name}=value\n"
-            f"Original error: {e}"
-        ) from e
+    # 4. Inline default
+    if default is not None:
+        value = default
+        if cast is not None:
+            value = cast(value)
+        if "DIR" in var_name and convert_dir_vars_to_abs_path:
+            value = if_relative_make_abs(Path(value), settings_py_defaults["BASE_DIR"])
+        return value
+
+    raise ValueError(
+        f"Configuration variable '{var_name}' is not defined.\n"
+        f"Set it via:\n"
+        f"  1. Command line: --{var_name}=value\n"
+        f"  2. Environment variable: export {var_name}=value\n"
+        f"  3. .env file: {var_name}=value"
+    )
 
 
 def create_directories():
     config("DATA_DIR").mkdir(parents=True, exist_ok=True)
+    config("MANUAL_DATA_DIR").mkdir(parents=True, exist_ok=True)
     config("OUTPUT_DIR").mkdir(parents=True, exist_ok=True)
 
 
 if __name__ == "__main__":
     create_directories()
+    print(f"BASE_DIR: {config('BASE_DIR')}")
+    print(f"DATA_DIR: {config('DATA_DIR')}")
+    print(f"OUTPUT_DIR: {config('OUTPUT_DIR')}")
+    print(f"REPORT_DATE: {config('REPORT_DATE')}")
+    print(f"REPORT_DATE_SLASH: {config('REPORT_DATE_SLASH')}")
