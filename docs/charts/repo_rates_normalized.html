@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
-    <title>&lt;no title&gt; &#8212; Bank Fragility Monitor</title>
+    <title>Repo Rates Normalized &#8212; Bank Fragility Monitor</title>
   
   
   
@@ -67,8 +67,8 @@ const thebe_selector_output = ".output, .cell_output"
     <script>DOCUMENTATION_OPTIONS.pagename = 'charts/repo_rates_normalized';</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="&lt;no title&gt;" href="repo_rates_normalized_w_balance_sheet.html" />
-    <link rel="prev" title="&lt;no title&gt;" href="repo_rates.html" />
+    <link rel="next" title="Repo Rates Normalized with Balance Sheet" href="repo_rates_normalized_w_balance_sheet.html" />
+    <link rel="prev" title="Repo Rates" href="repo_rates.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -169,8 +169,12 @@ const thebe_selector_output = ".output, .cell_output"
                 </a>
             </li>
         </ul>
-        <ul class="nav bd-sidenav">
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="repo_rates.html">Repo Rates</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Repo Rates Normalized</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo_rates_normalized_w_balance_sheet.html">Repo Rates Normalized with Balance Sheet</a></li>
 <li class="toctree-l1"><a class="reference internal" href="P2.bank_fragility.html">Bank Fragility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="P3.bank_losses.html">Bank Losses</a></li>
 </ul>
 
     </div>
@@ -296,9 +300,7 @@ document.write(`
   </button>
 `);
 </script>
-<label class="sidebar-toggle secondary-toggle btn btn-sm" for="__secondary"title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</label>
+
 </div></div>
       
     </div>
@@ -309,19 +311,11 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1><no title></h1>
+    <h1>Repo Rates Normalized</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="simple visible nav section-nav flex-column">
-</ul>
-
-            </nav>
         </div>
     </div>
 </div>
@@ -331,7 +325,9 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <p><strong>Description:</strong> This chat plots repo rates relative the midpoint of the Federal Funds target range. The shaded area shows the Federal Funds target range. During 2019, the Secured Overnight Financing Rate (SOFR), a broad measure of the cost of borrowing cash overnight collateralized by Treasury securities via repurchase agreements, often exceeded the upper limit of the Federal Funds target range. Since SOFR does not extend back further than 2017, we use the average repo rate in the triparty repo market whenever SOFR is unavailable.</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="repo-rates-normalized">
+<h1>Repo Rates Normalized<a class="headerlink" href="#repo-rates-normalized" title="Permalink to this heading">#</a></h1>
+<p><strong>Description:</strong> This chat plots repo rates relative the midpoint of the Federal Funds target range. The shaded area shows the Federal Funds target range. During 2019, the Secured Overnight Financing Rate (SOFR), a broad measure of the cost of borrowing cash overnight collateralized by Treasury securities via repurchase agreements, often exceeded the upper limit of the Federal Funds target range. Since SOFR does not extend back further than 2017, we use the average repo rate in the triparty repo market whenever SOFR is unavailable.</p>
 <p><strong>Relevance for Financial Stability:</strong> When SOFR exceeds the upper limit of the Federal Funds target range,
 this is indicative of a relative scarcity of liquidity in short term funding markets.</p>
 <p><strong>Direction of Risk:</strong> When repo rates exceed the fed funds target range, risk is higher. Higher relative repo rates are likely more risky that lower relative rates.</p>
@@ -344,6 +340,7 @@ relative\_rate &amp;= rate - midpoint
 <p><strong>Data Cleaning Information:</strong> N/A</p>
 <p><strong>Relation to a chart in an OFR public monitor:</strong> N/A</p>
 <p><strong>What does this add that other charts might not?</strong> Repo rates must be measured in relative terms, here relative the prevailing Fed Funds target, to assess risk in short-term funding markets.</p>
+</section>
 
     <script type="text/x-thebe-config">
     {
@@ -381,7 +378,7 @@ relative\_rate &amp;= rate - midpoint
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">&lt;no title&gt;</p>
+        <p class="prev-next-title">Repo Rates</p>
       </div>
     </a>
     <a class="right-next"
@@ -389,7 +386,7 @@ relative\_rate &amp;= rate - midpoint
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">&lt;no title&gt;</p>
+        <p class="prev-next-title">Repo Rates Normalized with Balance Sheet</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -399,21 +396,6 @@ relative\_rate &amp;= rate - midpoint
             </div>
             
             
-              
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav class="bd-toc-nav page-toc">
-    <ul class="simple visible nav section-nav flex-column">
-</ul>
-
-  </nav></div>
-
-</div></div>
               
             
           </div>
