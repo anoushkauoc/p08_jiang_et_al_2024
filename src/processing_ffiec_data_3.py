@@ -58,9 +58,6 @@ def fmt_dollar(num_thousands):
 
 
 def find_member_name(zf, target_stub: str) -> str:
-    """
-    Find a member in the zip whose filename contains target_stub.
-    """
     names = zf.namelist()
     matches = [name for name in names if target_stub.lower() in name.lower()]
     if not matches:
@@ -121,18 +118,23 @@ def large_num(num):
         )
 
 
+def allocate_across_buckets(df, source_col, prefix, weights):
+    total_weight = sum(weights.values())
+    if not np.isclose(total_weight, 1.0):
+        raise ValueError(f"Weights for {prefix} must sum to 1. Got {total_weight}")
+
+    source = df[source_col].fillna(0)
+    for bucket, weight in weights.items():
+        df[f"{prefix}_{bucket}"] += source * weight
+
+
 def write_summary_sheet(ws, df, panel_title, start_row=1):
     """Write a summary stats DataFrame to a worksheet with formatting."""
-    header_fill = PatternFill(
-        "solid", start_color="1F3864", end_color="1F3864"
-    )  # dark navy
-    subgroup_fill = PatternFill(
-        "solid", start_color="D9E1F2", end_color="D9E1F2"
-    )  # light blue
+    header_fill = PatternFill("solid", start_color="1F3864", end_color="1F3864")
+    subgroup_fill = PatternFill("solid", start_color="D9E1F2", end_color="D9E1F2")
     col_labels = [""] + list(df.columns)
     n_cols = len(col_labels)
 
-    # Panel title
     ws.merge_cells(
         start_row=start_row,
         start_column=1,
@@ -141,13 +143,10 @@ def write_summary_sheet(ws, df, panel_title, start_row=1):
     )
     title_cell = ws.cell(row=start_row, column=1, value=panel_title)
     title_cell.font = Font(name="Arial", bold=True, size=12, color="FFFFFF")
-    title_cell.fill = PatternFill(
-        "solid", start_color="1F3864", end_color="1F3864"
-    )
+    title_cell.fill = PatternFill("solid", start_color="1F3864", end_color="1F3864")
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
     start_row += 1
 
-    # Column sub-headers
     group_headers = [
         ("", 1),
         ("Aggregate", 1),
@@ -172,7 +171,6 @@ def write_summary_sheet(ws, df, panel_title, start_row=1):
         col += span
     start_row += 1
 
-    # Column detail headers
     detail_headers = [
         "Variable",
         "Aggregate",
@@ -284,50 +282,20 @@ rcfn_df = rc[[c for c in rc.columns if c.startswith("rcfn")]]
 
 # Section 4: Variable groupings
 global_rmbs = [
-    "rcfdg301",
-    "rcfdg303",
-    "rcfdg305",
-    "rcfdg307",
-    "rcfdg309",
-    "rcfdg311",
-    "rcfdg313",
-    "rcfdg315",
-    "rcfdg317",
-    "rcfdg319",
-    "rcfdg321",
-    "rcfdg323",
+    "rcfdg301", "rcfdg303", "rcfdg305", "rcfdg307", "rcfdg309", "rcfdg311",
+    "rcfdg313", "rcfdg315", "rcfdg317", "rcfdg319", "rcfdg321", "rcfdg323",
 ]
 global_cmbs = [
-    "rcfdk143",
-    "rcfdk145",
-    "rcfdk147",
-    "rcfdk149",
-    "rcfdk151",
-    "rcfdk153",
-    "rcfdk157",
+    "rcfdk143", "rcfdk145", "rcfdk147", "rcfdk149", "rcfdk151", "rcfdk153", "rcfdk157",
 ]
 global_abs = ["rcfdc988", "rcfdc027"]
 global_other = ["rcfd1738", "rcfd1741", "rcfd1743", "rcfd1746"]
 global_rs_loan = [
-    "rcfdf158",
-    "rcfdf159",
-    "rcfd1420",
-    "rcfd1420",
-    "rcfd1797",
-    "rcfd5367",
-    "rcfd5368",
-    "rcfd1460",
-    "rcfdf160",
-    "rcfdf161",
+    "rcfdf158", "rcfdf159", "rcfd1420", "rcfd1420", "rcfd1797",
+    "rcfd5367", "rcfd5368", "rcfd1460", "rcfdf160", "rcfdf161",
 ]
-global_rs_residential_loan = [
-    "rcfd1420",
-    "rcfd1797",
-    "rcfd5367",
-    "rcfd5368",
-    "rcfd1460",
-]
-global_rs_commerical_loan = ["rcfdf160", "rcfdf161"]
+global_rs_residential_loan = ["rcfd1420", "rcfd1797", "rcfd5367", "rcfd5368", "rcfd1460"]
+global_rs_commercial_loan = ["rcfdf160", "rcfdf161"]
 global_rs_other_loan = ["rcfdf158", "rcfdf159"]
 global_ci_loan = ["rcfd1763", "rcfd1764"]
 global_consumer_loan = ["rcfdb538", "rcfdb539", "rcfdk137", "rcfdk207"]
@@ -336,48 +304,18 @@ domestic_cash = ["rcon0081", "rcon0071"]
 domestic_total = ["rcon1771", "rcon1773"]
 domestic_treasury = ["rcon0213", "rcon1287"]
 domestic_rmbs = [
-    "rconht55",
-    "rconht57",
-    "rcong309",
-    "rcong311",
-    "rcong313",
-    "rcong315",
-    "rcong317",
-    "rcong319",
-    "rcong321",
-    "rcong323",
+    "rconht55", "rconht57", "rcong309", "rcong311", "rcong313",
+    "rcong315", "rcong317", "rcong319", "rcong321", "rcong323",
 ]
-domestic_cmbs = [
-    "rconk143",
-    "rconk145",
-    "rconk147",
-    "rconk149",
-    "rconk151",
-    "rconk153",
-    "rconk157",
-]
+domestic_cmbs = ["rconk143", "rconk145", "rconk147", "rconk149", "rconk151", "rconk153", "rconk157"]
 domestic_abs = ["rconc988", "rconc027", "rconht59", "rconht61"]
 domestic_other = ["rcon1738", "rcon1741", "rcon1743", "rcon1746"]
 domestic_rs_loan = [
-    "rconf158",
-    "rconf159",
-    "rcon1420",
-    "rcon1420",
-    "rcon1797",
-    "rcon5367",
-    "rcon5368",
-    "rcon1460",
-    "rconf160",
-    "rconf161",
+    "rconf158", "rconf159", "rcon1420", "rcon1420", "rcon1797",
+    "rcon5367", "rcon5368", "rcon1460", "rconf160", "rconf161",
 ]
-domestic_rs_residential_loan = [
-    "rcon1420",
-    "rcon1797",
-    "rcon5367",
-    "rcon5368",
-    "rcon1460",
-]
-domestic_rs_commerical_loan = ["rconf160", "rconf161"]
+domestic_rs_residential_loan = ["rcon1420", "rcon1797", "rcon5367", "rcon5368", "rcon1460"]
+domestic_rs_commercial_loan = ["rconf160", "rconf161"]
 domestic_rs_other_loan = ["rconf158", "rconf159"]
 domestic_ci_loan = ["rcon1766"]
 domestic_consumer_loan = ["rconb538", "rconb539", "rconk137", "rconk207"]
@@ -398,7 +336,7 @@ check_cols(rcfd_df, global_abs, "global_abs")
 check_cols(rcfd_df, global_other, "global_other")
 check_cols(rcfd_df, global_rs_loan, "global_rs_loan")
 check_cols(rcfd_df, global_rs_residential_loan, "global_rs_residential_loan")
-check_cols(rcfd_df, global_rs_commerical_loan, "global_rs_commerical_loan")
+check_cols(rcfd_df, global_rs_commercial_loan, "global_rs_commercial_loan")
 check_cols(rcfd_df, global_rs_other_loan, "global_rs_other_loan")
 check_cols(rcfd_df, global_ci_loan, "global_ci_loan")
 check_cols(rcfd_df, global_consumer_loan, "global_consumer_loan")
@@ -419,7 +357,7 @@ check_cols(rcon_df, domestic_abs, "domestic_abs")
 check_cols(rcon_df, domestic_other, "domestic_other")
 check_cols(rcon_df, domestic_rs_loan, "domestic_rs_loan")
 check_cols(rcon_df, domestic_rs_residential_loan, "domestic_rs_residential_loan")
-check_cols(rcon_df, domestic_rs_commerical_loan, "domestic_rs_commerical_loan")
+check_cols(rcon_df, domestic_rs_commercial_loan, "domestic_rs_commercial_loan")
 check_cols(rcon_df, domestic_rs_other_loan, "domestic_rs_other_loan")
 check_cols(rcon_df, domestic_ci_loan, "domestic_ci_loan")
 check_cols(rcon_df, domestic_consumer_loan, "domestic_consumer_loan")
@@ -461,7 +399,7 @@ rcfd_data["security_other"] = rcfd_df[global_other].sum(axis=1)
 rcfd_data["Total_Loan"] = rcfd_df["rcfd2122"]
 rcfd_data["Real_Estate_Loan"] = rcfd_df[global_rs_loan].sum(axis=1)
 rcfd_data["Residential_Mortgage"] = rcfd_df[global_rs_residential_loan].sum(axis=1)
-rcfd_data["Commerical_Mortgage"] = rcfd_df[global_rs_commerical_loan].sum(axis=1)
+rcfd_data["Commercial_Mortgage"] = rcfd_df[global_rs_commercial_loan].sum(axis=1)
 rcfd_data["Other_Real_Estate_Mortgage"] = rcfd_df[global_rs_other_loan].sum(axis=1)
 rcfd_data["Agri_Loan"] = rcfd_df["rcfd1590"]
 rcfd_data["Comm_Indu_Loan"] = rcfd_df[global_ci_loan].sum(axis=1)
@@ -482,7 +420,7 @@ rcon_data["security_other"] = rcon_df[domestic_other].sum(axis=1)
 rcon_data["Total_Loan"] = rcon_df["rcon2122"]
 rcon_data["Real_Estate_Loan"] = rcon_df[domestic_rs_loan].sum(axis=1)
 rcon_data["Residential_Mortgage"] = rcon_df[domestic_rs_residential_loan].sum(axis=1)
-rcon_data["Commerical_Mortgage"] = rcon_df[domestic_rs_commerical_loan].sum(axis=1)
+rcon_data["Commercial_Mortgage"] = rcon_df[domestic_rs_commercial_loan].sum(axis=1)
 rcon_data["Other_Real_Estate_Mortgage"] = rcon_df[domestic_rs_other_loan].sum(axis=1)
 rcon_data["Agri_Loan"] = rcon_df["rcon1590"]
 rcon_data["Comm_Indu_Loan"] = rcon_df[domestic_ci_loan].sum(axis=1)
@@ -494,19 +432,14 @@ rcon_data["Reverse_Repo"] = rcon_df["rconb989"]
 # Bucketed RMBS exposures
 for bucket, cols in global_rmbs_buckets.items():
     existing_cols = [c for c in cols if c in rcfd_df.columns]
-    rcfd_data[f"rmbs_{bucket}"] = (
-        rcfd_df[existing_cols].sum(axis=1) if existing_cols else 0
-    )
+    rcfd_data[f"rmbs_{bucket}"] = rcfd_df[existing_cols].sum(axis=1) if existing_cols else 0
 
 for bucket, cols in domestic_rmbs_buckets.items():
     existing_cols = [c for c in cols if c in rcon_df.columns]
-    rcon_data[f"rmbs_{bucket}"] = (
-        rcon_df[existing_cols].sum(axis=1) if existing_cols else 0
-    )
+    rcon_data[f"rmbs_{bucket}"] = rcon_df[existing_cols].sum(axis=1) if existing_cols else 0
 
-# Temporary bucket allocation for Treasury / other assets / mortgages
+# Initialize non-RMBS buckets
 bucket_names = ["lt1y", "1_3y", "3_5y", "5_10y", "10_15y", "15plus"]
-
 for bucket in bucket_names:
     rcfd_data[f"treasury_{bucket}"] = 0.0
     rcfd_data[f"other_assets_{bucket}"] = 0.0
@@ -518,47 +451,74 @@ for bucket in bucket_names:
     rcon_data[f"res_mtg_{bucket}"] = 0.0
     rcon_data[f"other_loan_{bucket}"] = 0.0
 
-# Coarse fallback: put current aggregates into the longest bucket
-rcfd_data["treasury_15plus"] = rcfd_data["security_treasury"]
+TREASURY_WEIGHTS = {
+    "lt1y": 0.20,
+    "1_3y": 0.25,
+    "3_5y": 0.20,
+    "5_10y": 0.20,
+    "10_15y": 0.10,
+    "15plus": 0.05,
+}
+OTHER_ASSET_WEIGHTS = {
+    "lt1y": 0.10,
+    "1_3y": 0.15,
+    "3_5y": 0.20,
+    "5_10y": 0.25,
+    "10_15y": 0.20,
+    "15plus": 0.10,
+}
+RES_MTG_WEIGHTS = {
+    "lt1y": 0.05,
+    "1_3y": 0.10,
+    "3_5y": 0.15,
+    "5_10y": 0.25,
+    "10_15y": 0.25,
+    "15plus": 0.20,
+}
+OTHER_LOAN_WEIGHTS = {
+    "lt1y": 0.20,
+    "1_3y": 0.20,
+    "3_5y": 0.20,
+    "5_10y": 0.20,
+    "10_15y": 0.10,
+    "15plus": 0.10,
+}
 
-# Keep securities that are not Treasury or RMBS in other_assets
-rcfd_data["other_assets_15plus"] = (
-    rcfd_data["security_cmbs"]
-    + rcfd_data["security_abs"]
-    + rcfd_data["security_other"]
-)
+# Allocate stylized non-RMBS maturities
+allocate_across_buckets(rcfd_data, "security_treasury", "treasury", TREASURY_WEIGHTS)
+allocate_across_buckets(rcfd_data, "security_cmbs", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcfd_data, "security_abs", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcfd_data, "security_other", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcfd_data, "Residential_Mortgage", "res_mtg", RES_MTG_WEIGHTS)
 
-# Residential mortgage stays separate
-rcfd_data["res_mtg_15plus"] = rcfd_data["Residential_Mortgage"]
-
-# Put non-residential / other loans here
-rcfd_data["other_loan_15plus"] = (
-    rcfd_data["Commerical_Mortgage"]
+rcfd_data["other_loan_total_tmp"] = (
+    rcfd_data["Commercial_Mortgage"]
     + rcfd_data["Other_Real_Estate_Mortgage"]
     + rcfd_data["Agri_Loan"]
     + rcfd_data["Comm_Indu_Loan"]
     + rcfd_data["Consumer_Loan"]
     + rcfd_data["Non_Rep_Loan"].fillna(0)
 )
+allocate_across_buckets(rcfd_data, "other_loan_total_tmp", "other_loan", OTHER_LOAN_WEIGHTS)
 
-rcon_data["treasury_15plus"] = rcon_data["security_treasury"]
+allocate_across_buckets(rcon_data, "security_treasury", "treasury", TREASURY_WEIGHTS)
+allocate_across_buckets(rcon_data, "security_cmbs", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcon_data, "security_abs", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcon_data, "security_other", "other_assets", OTHER_ASSET_WEIGHTS)
+allocate_across_buckets(rcon_data, "Residential_Mortgage", "res_mtg", RES_MTG_WEIGHTS)
 
-rcon_data["other_assets_15plus"] = (
-    rcon_data["security_cmbs"]
-    + rcon_data["security_abs"]
-    + rcon_data["security_other"]
-)
-
-rcon_data["res_mtg_15plus"] = rcon_data["Residential_Mortgage"]
-
-rcon_data["other_loan_15plus"] = (
-    rcon_data["Commerical_Mortgage"]
+rcon_data["other_loan_total_tmp"] = (
+    rcon_data["Commercial_Mortgage"]
     + rcon_data["Other_Real_Estate_Mortgage"]
     + rcon_data["Agri_Loan"]
     + rcon_data["Comm_Indu_Loan"]
     + rcon_data["Consumer_Loan"]
     + rcon_data["Non_Rep_Loan"].fillna(0)
 )
+allocate_across_buckets(rcon_data, "other_loan_total_tmp", "other_loan", OTHER_LOAN_WEIGHTS)
+
+rcfd_data = rcfd_data.drop(columns=["other_loan_total_tmp"], errors="ignore")
+rcon_data = rcon_data.drop(columns=["other_loan_total_tmp"], errors="ignore")
 
 # Section 5.2: Merging rcfd and rcon to create asset tables
 bank_asset = pd.merge(
@@ -577,6 +537,10 @@ for col_df2 in asset_df2_cols:
         bank_asset[col] = bank_asset[col].fillna(bank_asset[col_df2])
 bank_asset = bank_asset.drop(columns=asset_df2_cols)
 
+print("\nPost-merge bucket totals:")
+for prefix in ["rmbs_", "treasury_", "other_assets_", "res_mtg_", "other_loan_"]:
+    cols = [c for c in bank_asset.columns if c.startswith(prefix)]
+    print(prefix, bank_asset[cols].sum().sum())
 
 # Section 6: Creating liability tables
 global_liability = pd.DataFrame(index=rcon_df.index)
@@ -587,9 +551,7 @@ global_liability["Uninsured Deposit"] = (
     global_liability["Domestic Deposit"] - global_liability["Insured Deposit"]
 )
 global_liability["Uninsured Time Deposits"] = rcon_df["rconj474"]
-global_liability["Uninsured Long-Term Time Deposits"] = rcon_df[uninsured_long].sum(
-    axis=1
-)
+global_liability["Uninsured Long-Term Time Deposits"] = rcon_df[uninsured_long].sum(axis=1)
 global_liability["Uninsured Short-Term Time Deposits"] = rcon_df["rconk222"]
 global_liability["Foreign Deposit"] = rcfn_df["rcfn2200"]
 global_liability["Fed Fund Purchase"] = rcon_df["rconb993"]
@@ -608,9 +570,7 @@ domestic_liability["Uninsured Deposit"] = (
     domestic_liability["Domestic Deposit"] - domestic_liability["Insured Deposit"]
 )
 domestic_liability["Uninsured Time Deposits"] = rcon_df["rconj474"]
-domestic_liability["Uninsured Long-Term Time Deposits"] = rcon_df[
-    uninsured_long
-].sum(axis=1)
+domestic_liability["Uninsured Long-Term Time Deposits"] = rcon_df[uninsured_long].sum(axis=1)
 domestic_liability["Uninsured Short-Term Time Deposits"] = rcon_df["rconk222"]
 domestic_liability["Foreign Deposit"] = rcfn_df["rcfn2200"]
 domestic_liability["Fed Fund Purchase"] = rcon_df["rconb993"]
@@ -647,7 +607,6 @@ bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
 bank_panel.to_parquet(bank_panel_path, index=False)
 print(f"Bank panel saved -> {bank_panel_path}")
 
-
 # Section 7: Summary stats for assets by bank category
 threshold = 1.384e6  # $1.384 billion in thousands
 
@@ -661,9 +620,7 @@ if "rssd_id_call" not in gsib_df.columns:
     else:
         raise ValueError("GSIB list must contain 'rssd_id_call' or 'rssd_id'.")
 
-gsib_ids = set(
-    pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce").dropna().astype(int)
-)
+gsib_ids = set(pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce").dropna().astype(int))
 bank_asset.loc[bank_asset.index.isin(gsib_ids), "Bank Category"] = 2
 
 test_df = pd.DataFrame()
@@ -745,7 +702,7 @@ test_df.loc["N Banks", "small(mean)"] = (bank_asset["Bank Category"] == 0).sum()
 test_df.loc["N Banks", "large(mean)"] = (bank_asset["Bank Category"] == 1).sum()
 test_df.loc["N Banks", "GSIB(mean)"] = (bank_asset["Bank Category"] == 2).sum()
 
-test_df = test_df.drop(index="Bank Category")
+test_df = test_df.drop(index="Bank Category", errors="ignore")
 test_df = test_df.fillna("")
 
 test_df = test_df.rename(
@@ -761,7 +718,7 @@ test_df = test_df.rename(
         "Total_Loan": "Total Loan",
         "Real_Estate_Loan": "Real Estate Loan",
         "Residential_Mortgage": "Residential Mortgage",
-        "Commerical_Mortgage": "Commercial Mortgage",
+        "Commercial_Mortgage": "Commercial Mortgage",
         "Other_Real_Estate_Mortgage": "Other Real Estate Loan",
         "Agri_Loan": "Agricultural Loan",
         "Comm_Indu_Loan": "Commercial & Industrial Loan",
@@ -794,8 +751,7 @@ row_order = [
     "Fed Funds Sold",
     "Reverse Repo",
 ]
-test_df = test_df.loc[row_order]
-
+test_df = test_df.reindex(row_order).fillna("")
 
 # Section 8: Summary stats for liabilities by bank category
 bank_liability = bank_liability.join(bank_asset[["Bank Category"]], how="left")
@@ -830,7 +786,6 @@ df2["GSIB(sd)"] = gsib_sd
 df2 = df2.drop(index=["Total Asset", "Bank Category"], errors="ignore")
 df2 = df2.fillna(0).round(1)
 
-
 # Section 9: Save summary stats to Excel
 wb = Workbook()
 
@@ -854,7 +809,6 @@ for col_idx in range(2, 10):
 summary_path = OUTPUT_DIR / f"summary_stats_{REPORT_DATE}.xlsx"
 wb.save(summary_path)
 print(f"Summary stats saved -> {summary_path}")
-
 
 # Section 10: Save figures — Assets and Liabilities
 aggregate_sum_assets = bank_asset["Total Asset"].sum()

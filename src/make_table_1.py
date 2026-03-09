@@ -13,7 +13,8 @@ DATA_DIR = Path(config("DATA_DIR"))
 OUTPUT_DIR = Path(config("OUTPUT_DIR"))
 REPORT_DATE = config("REPORT_DATE")
 
-SMALL_CUTOFF = 1.384e6
+# Call report values are typically in thousands of dollars
+SMALL_CUTOFF = 1.384e6  # = $1.384B in thousands
 
 BUCKETS = [
     ("lt1y", "d_tsy_1Y"),
@@ -25,63 +26,50 @@ BUCKETS = [
 ]
 
 
-def generate_table1(bank_panel):
-
-    summary = bank_panel.groupby("bank_group").agg(
-        total_assets=("assets", "sum"),
-        uninsured_deposits=("uninsured_deposits", "sum"),
-        securities=("securities", "sum"),
-    )
-
-    summary = summary.round(2)
-
-    table_path = OUTPUT_DIR / "table1.tex"
-
-    summary.to_latex(
-        table_path,
-        caption="Bank balance sheet exposure by bank group",
-        label="tab:table1",
-        float_format="%.2f"
-    )
-
-    print(f"Table saved to {table_path}")
-
-def generate_updated_table(bank_panel):
-
-    updated = bank_panel.groupby("bank_group").agg(
-        assets=("assets", "sum"),
-        unrealized_losses=("loss_estimate", "sum")
-    )
-
-    updated = updated.round(2)
-
-    updated.to_latex(
-        OUTPUT_DIR / "table1_updated.tex",
-        caption="Updated unrealized losses through 2025",
-        label="tab:table1_updated",
-        float_format="%.2f"
-    )
-
 def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     out = a / b.replace({0: np.nan})
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def _fmt_med_sd(
+def _winsorize_series(x: pd.Series, p: float = 0.01) -> pd.Series:
+    v = x.dropna()
+    if len(v) == 0:
+        return x
+    lo = v.quantile(p)
+    hi = v.quantile(1 - p)
+    return x.clip(lower=lo, upper=hi)
+
+
+def _fmt_med(
     x: pd.Series,
     scale: float = 1.0,
     digits: int = 1,
     suffix: str = "",
-) -> tuple[str, str]:
+) -> str:
     v = x.dropna() * scale
     if len(v) == 0:
-        return ("", "")
+        return ""
     med = np.nanmedian(v)
+    return f"{med:.{digits}f}{suffix}"
+
+
+def _fmt_sd(
+    x: pd.Series,
+    scale: float = 1.0,
+    digits: int = 1,
+) -> str:
+    v = x.dropna() * scale
+    if len(v) == 0:
+        return ""
     sd = np.nanstd(v, ddof=0)
-    return (f"{med:.{digits}f}{suffix}", f"({sd:,.{digits}f})")
+    return f"({sd:,.{digits}f})"
 
 
 def _fmt_agg_loss_thousands(x: pd.Series) -> str:
+    """
+    Input assumed in thousands of dollars.
+    Convert to dollars for display scaling.
+    """
     total_dollars = float(np.nansum(x.values)) * 1000
     abs_total = abs(total_dollars)
 
@@ -94,13 +82,15 @@ def _fmt_agg_loss_thousands(x: pd.Series) -> str:
     return f"{total_dollars:.0f}"
 
 
-def _winsorize_series(x: pd.Series, p: float = 0.01) -> pd.Series:
-    v = x.dropna()
-    if len(v) == 0:
-        return x
-    lo = v.quantile(p)
-    hi = v.quantile(1 - p)
-    return x.clip(lower=lo, upper=hi)
+def _format_table_latex(table: pd.DataFrame) -> str:
+    latex = table.to_latex(
+        escape=False,
+        column_format="lcccc",
+    )
+    latex = latex.replace("\\toprule", "\\hline")
+    latex = latex.replace("\\midrule", "\\hline")
+    latex = latex.replace("\\bottomrule", "\\hline")
+    return latex
 
 
 def main() -> None:
@@ -153,8 +143,7 @@ def main() -> None:
     )
     banks["is_gsib"] = banks["rssd_id_call"].isin(gsib_ids).astype(int)
 
-    print("GSIB counts:", banks["is_gsib"].value_counts(dropna=False).to_dict())
-
+    # Bank groups
     banks["size_group"] = "large_non_gsib"
     banks.loc[banks["Total Asset"] < SMALL_CUTOFF, "size_group"] = "small"
     banks.loc[banks["is_gsib"] == 1, "size_group"] = "gsib"
@@ -163,16 +152,18 @@ def main() -> None:
 
     print("\nUsing shocks:")
     for _, shock_col in BUCKETS:
-        print(f"  {shock_col} = {float(shocks[shock_col]):.4f}")
-    print(f"  rmbs_multiplier = {rmbs_multiplier:.4f}")
+        print(f"  {shock_col} = {float(shocks[shock_col]):.6f}")
+    print(f"  rmbs_multiplier = {rmbs_multiplier:.6f}")
 
+    # Initialize positive loss magnitudes
     banks["loss_rmbs"] = 0.0
     banks["loss_tsy_other"] = 0.0
     banks["loss_res_mtg"] = 0.0
     banks["loss_other_loan"] = 0.0
 
+    # Compute losses as positive magnitudes
     for suffix, shock_col in BUCKETS:
-        shock = float(shocks[shock_col])
+        shock = abs(float(shocks[shock_col]))
 
         banks["loss_rmbs"] += (
             banks[f"rmbs_{suffix}"].fillna(0) * shock * rmbs_multiplier
@@ -198,14 +189,44 @@ def main() -> None:
         + banks["loss_other_loan"]
     )
 
+    # Mark-to-market assets
     banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
 
-    print("Banks with non-positive mm_assets:", int((banks["mm_assets"] <= 0).sum()))
+    # Diagnostics
+    print("\nNumber of banks by group:")
+    print(banks["size_group"].value_counts(dropna=False))
+
+    print("\nRaw exposure totals by category:")
+    for prefix in [
+        "rmbs_",
+        "treasury_",
+        "other_assets_",
+        "res_mtg_",
+        "other_loan_",
+    ]:
+        cols = [c for c in banks.columns if c.startswith(prefix)]
+        print(f"{prefix:<15} {banks[cols].sum().sum():,.2f}")
+
+    print("\nLoss totals by category:")
     print(
-        "\nLoss sums by channel:\n",
-        banks[["loss_rmbs", "loss_tsy_other", "loss_res_mtg", "loss_other_loan"]].sum()
+        banks[
+            ["loss_rmbs", "loss_tsy_other", "loss_res_mtg", "loss_other_loan"]
+        ].sum()
     )
 
+    print("\nAny positive losses?")
+    print(
+        (
+            banks[
+                ["loss_rmbs", "loss_tsy_other", "loss_res_mtg", "loss_other_loan"]
+            ] > 0
+        ).sum()
+    )
+
+    print("\nBanks with non-positive mm_assets:")
+    print(int((banks["mm_assets"] <= 0).sum()))
+
+    # Shares of total loss
     banks["share_rmbs"] = 100 * _safe_div(banks["loss_rmbs"], banks["loss_total"])
     banks["share_tsy_other"] = 100 * _safe_div(
         banks["loss_tsy_other"], banks["loss_total"]
@@ -217,12 +238,20 @@ def main() -> None:
         banks["loss_other_loan"], banks["loss_total"]
     )
 
+    # Other ratios
     banks["loss_asset_pct"] = 100 * _safe_div(
         banks["loss_total"], banks["Total Asset"]
     )
 
     banks["unins_dep_mm_asset_pct"] = 100 * _safe_div(
         banks["Uninsured Deposit"], banks["mm_assets"]
+    )
+
+    print("\nMedian shares:")
+    print(
+        banks[
+            ["share_rmbs", "share_tsy_other", "share_res_mtg", "share_other_loan"]
+        ].median()
     )
 
     groups = {
@@ -235,32 +264,33 @@ def main() -> None:
     out_rows = []
     out_index = []
 
+    # Aggregate Loss
     out_index.append("Aggregate Loss")
     out_rows.append(
         {k: _fmt_agg_loss_thousands(df["loss_total"]) for k, df in groups.items()}
     )
 
+    # Bank-Level Loss
     out_index.append("Bank-Level Loss")
     out_rows.append(
         {
-            k: _fmt_med_sd(
+            k: _fmt_med(
                 _winsorize_series(df["loss_total"], 0.01),
-                scale=1 / 1000,
+                scale=1 / 1000,  # thousands -> millions
                 digits=1,
                 suffix="M",
-            )[0]
+            )
             for k, df in groups.items()
         }
     )
-
     out_index.append("")
     out_rows.append(
         {
-            k: _fmt_med_sd(
+            k: _fmt_sd(
                 _winsorize_series(df["loss_total"], 0.01),
                 scale=1 / 1000,
                 digits=1,
-            )[1]
+            )
             for k, df in groups.items()
         }
     )
@@ -276,14 +306,14 @@ def main() -> None:
         out_index.append(label)
         out_rows.append(
             {
-                k: _fmt_med_sd(_winsorize_series(df[col], 0.01))[0]
+                k: _fmt_med(_winsorize_series(df[col], 0.01), digits=1)
                 for k, df in groups.items()
             }
         )
         out_index.append("")
         out_rows.append(
             {
-                k: _fmt_med_sd(_winsorize_series(df[col], 0.01))[1]
+                k: _fmt_sd(_winsorize_series(df[col], 0.01), digits=1)
                 for k, df in groups.items()
             }
         )
@@ -291,15 +321,14 @@ def main() -> None:
     out_index.append("Loss/Asset")
     out_rows.append(
         {
-            k: _fmt_med_sd(_winsorize_series(df["loss_asset_pct"], 0.01))[0]
+            k: _fmt_med(_winsorize_series(df["loss_asset_pct"], 0.01), digits=1)
             for k, df in groups.items()
         }
     )
-
     out_index.append("")
     out_rows.append(
         {
-            k: _fmt_med_sd(_winsorize_series(df["loss_asset_pct"], 0.01))[1]
+            k: _fmt_sd(_winsorize_series(df["loss_asset_pct"], 0.01), digits=1)
             for k, df in groups.items()
         }
     )
@@ -307,19 +336,20 @@ def main() -> None:
     out_index.append("Uninsured Deposit/MM Asset")
     out_rows.append(
         {
-            k: _fmt_med_sd(
-                _winsorize_series(df["unins_dep_mm_asset_pct"], 0.01)
-            )[0]
+            k: _fmt_med(
+                _winsorize_series(df["unins_dep_mm_asset_pct"], 0.01),
+                digits=1,
+            )
             for k, df in groups.items()
         }
     )
-
     out_index.append("")
     out_rows.append(
         {
-            k: _fmt_med_sd(
-                _winsorize_series(df["unins_dep_mm_asset_pct"], 0.01)
-            )[1]
+            k: _fmt_sd(
+                _winsorize_series(df["unins_dep_mm_asset_pct"], 0.01),
+                digits=1,
+            )
             for k, df in groups.items()
         }
     )
@@ -336,10 +366,7 @@ def main() -> None:
 
     table.to_csv(csv_path)
 
-    latex_str = table.to_latex(
-        escape=False,
-        column_format="lcccc",
-    )
+    latex_str = _format_table_latex(table)
     with open(tex_path, "w") as f:
         f.write(latex_str)
 
