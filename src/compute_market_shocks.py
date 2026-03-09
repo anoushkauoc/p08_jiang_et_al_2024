@@ -14,6 +14,7 @@ MARKET_END_DATE = pd.to_datetime(config("MARKET_END_DATE"))
 def _nearest_row(df: pd.DataFrame, target_date: pd.Timestamp) -> pd.Series:
     temp = df.copy()
     temp["date"] = pd.to_datetime(temp["date"])
+    temp = temp.dropna(subset=["date"])
     temp["dist"] = (temp["date"] - target_date).abs()
     return temp.sort_values("dist").iloc[0]
 
@@ -30,8 +31,42 @@ def main() -> None:
     yields = pd.read_parquet(yields_path)
     mbs = pd.read_parquet(mbs_path)
 
-    yields["date"] = pd.to_datetime(yields["date"])
-    mbs["date"] = pd.to_datetime(mbs["date"])
+    if yields.empty:
+        raise ValueError(
+            f"Treasury yields file exists but is empty: {yields_path}. "
+            "The treasury pull likely failed."
+        )
+
+    yields["date"] = pd.to_datetime(yields["date"], errors="coerce")
+    mbs["date"] = pd.to_datetime(mbs["date"], errors="coerce")
+
+    # Rename FRED-style columns to tenor labels expected below
+    yields = yields.rename(
+        columns={
+            "dgs1": "1Y",
+            "dgs3": "3Y",
+            "dgs5": "5Y",
+            "dgs10": "10Y",
+            "dgs20": "20Y",
+            "dgs30": "30Y",
+        }
+    )
+
+    required_yield_cols = ["date", "1Y", "3Y", "5Y", "10Y", "20Y", "30Y"]
+    missing_yields = [c for c in required_yield_cols if c not in yields.columns]
+    if missing_yields:
+        raise ValueError(
+            f"Missing required Treasury columns: {missing_yields}. "
+            f"Available columns are: {list(yields.columns)}"
+        )
+
+    required_mbs_cols = ["date", "rmbs_px", "cmbs_px"]
+    missing_mbs = [c for c in required_mbs_cols if c not in mbs.columns]
+    if missing_mbs:
+        raise ValueError(
+            f"Missing required MBS ETF columns: {missing_mbs}. "
+            f"Available columns are: {list(mbs.columns)}"
+        )
 
     y0 = _nearest_row(yields, MARKET_START_DATE)
     y1 = _nearest_row(yields, MARKET_END_DATE)
@@ -52,9 +87,6 @@ def main() -> None:
     signed_tsy_price_changes = {}
 
     for tenor, duration in durations.items():
-        if tenor not in yields.columns:
-            raise ValueError(f"Missing Treasury tenor column: {tenor}")
-
         delta_y = (float(y1[tenor]) - float(y0[tenor])) / 100.0
         signed_price_change = -duration * delta_y
         signed_tsy_price_changes[tenor] = signed_price_change
@@ -70,13 +102,10 @@ def main() -> None:
     rmbs_loss = max(0.0, -rmbs_return)
     cmbs_loss = max(0.0, -cmbs_return)
 
-    # Use absolute average Treasury price move for multiplier construction
     avg_abs_tsy_move = sum(abs(v) for v in signed_tsy_price_changes.values()) / len(
         signed_tsy_price_changes
     )
 
-    # Multiplier should reflect relative sensitivity, not collapse to zero just
-    # because the ETF had a positive return over the chosen window.
     rmbs_multiplier = abs(rmbs_return) / avg_abs_tsy_move if avg_abs_tsy_move > 0 else 1.0
     cmbs_multiplier = abs(cmbs_return) / avg_abs_tsy_move if avg_abs_tsy_move > 0 else 1.0
 

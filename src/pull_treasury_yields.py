@@ -15,7 +15,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_PATH = DATA_DIR / "treasury_yields.parquet"
 
 SERIES = {
-    #"dgs1": "DGS1",
+    "dgs1": "DGS1",
     "dgs3": "DGS3",
     "dgs5": "DGS5",
     "dgs10": "DGS10",
@@ -23,14 +23,19 @@ SERIES = {
     "dgs30": "DGS30",
 }
 
-BASE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
+BASE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?cosd=1900-01-01&id={series}"
 
 
-def pull(series_code: str, max_retries: int = 4, timeout: int = 20) -> pd.DataFrame:
+def pull(series_code: str, max_retries: int = 2, timeout: int = 15) -> pd.DataFrame:
     url = BASE_URL.format(series=series_code)
 
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    session.headers.update(
+        {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/csv,*/*",
+        }
+    )
 
     last_err = None
     for attempt in range(1, max_retries + 1):
@@ -44,47 +49,53 @@ def pull(series_code: str, max_retries: int = 4, timeout: int = 20) -> pd.DataFr
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
             df["value"] = pd.to_numeric(df["value"], errors="coerce")
             df = df.dropna(subset=["date"])
-
             return df
 
         except Exception as e:
             last_err = e
             print(f"Attempt {attempt}/{max_retries} failed for {series_code}: {e}")
             if attempt < max_retries:
-                time.sleep(2 * attempt)
+                time.sleep(1)
 
-    raise RuntimeError(f"Failed to pull {series_code} after {max_retries} attempts") from last_err
+    raise RuntimeError(f"Failed to pull {series_code}") from last_err
+
+
+def write_placeholder() -> None:
+    placeholder = pd.DataFrame(
+        {
+            "date": pd.to_datetime([]),
+            "dgs1": pd.Series(dtype="float64"),
+            "dgs3": pd.Series(dtype="float64"),
+            "dgs5": pd.Series(dtype="float64"),
+            "dgs10": pd.Series(dtype="float64"),
+            "dgs20": pd.Series(dtype="float64"),
+            "dgs30": pd.Series(dtype="float64"),
+        }
+    )
+    placeholder.to_parquet(OUTPUT_PATH, index=False)
+    print(f"Wrote placeholder file to {OUTPUT_PATH}")
 
 
 def main() -> None:
-    # If file already exists, you can keep using it when live pull fails
-    existing = None
-    if OUTPUT_PATH.exists():
-        existing = pd.read_parquet(OUTPUT_PATH)
+    pulled = []
 
-    frames = []
-
-    try:
-        for out_name, fred_code in SERIES.items():
+    for out_name, fred_code in SERIES.items():
+        try:
             df = pull(fred_code).rename(columns={"value": out_name})
-            frames.append(df)
+            pulled.append(df)
+        except Exception as e:
+            print(f"Skipping {fred_code}: {e}")
 
-        out = frames[0]
-        for df in frames[1:]:
+    if pulled:
+        out = pulled[0]
+        for df in pulled[1:]:
             out = out.merge(df, on="date", how="outer")
 
         out = out.sort_values("date").drop_duplicates(subset=["date"]).reset_index(drop=True)
         out.to_parquet(OUTPUT_PATH, index=False)
-
         print(f"Wrote {OUTPUT_PATH} | rows={len(out)} cols={out.shape[1]}")
-
-    except Exception as e:
-        if existing is not None:
-            print(f"Live pull failed. Using cached file at {OUTPUT_PATH}")
-            print(f"Original error: {e}")
-            print(f"Cached file has rows={len(existing)} cols={existing.shape[1]}")
-        else:
-            raise
+    else:
+        write_placeholder()
 
 
 if __name__ == "__main__":
