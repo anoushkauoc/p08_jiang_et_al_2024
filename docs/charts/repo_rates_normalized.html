@@ -9,7 +9,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
-    <title>Description &#8212; Bank Fragility Monitor</title>
+    <title>Repo Rates Normalized &#8212; Bank Fragility Monitor</title>
   
   
   
@@ -62,9 +62,13 @@ const thebe_selector_input = "pre"
 const thebe_selector_output = ".output, .cell_output"
 </script>
     <script async="async" src="../_static/sphinx-thebe.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'dataframes/repo_public_relative_fed';</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'charts/repo_rates_normalized';</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Repo Rates Normalized with Balance Sheet" href="repo_rates_normalized_w_balance_sheet.html" />
+    <link rel="prev" title="Repo Rates" href="repo_rates.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -127,8 +131,6 @@ const thebe_selector_output = ".output, .cell_output"
       
       
       
-        
-      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -167,12 +169,12 @@ const thebe_selector_output = ".output, .cell_output"
                 </a>
             </li>
         </ul>
-        <ul class="nav bd-sidenav">
-<li class="toctree-l1"><a class="reference internal" href="../charts/repo_rates.html">Repo Rates</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../charts/repo_rates_normalized.html">Repo Rates Normalized</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../charts/repo_rates_normalized_w_balance_sheet.html">Repo Rates Normalized with Balance Sheet</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../charts/P2.bank_fragility.html">Bank Fragility</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../charts/P3.bank_losses.html">Bank Losses</a></li>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="repo_rates.html">Repo Rates</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Repo Rates Normalized</a></li>
+<li class="toctree-l1"><a class="reference internal" href="repo_rates_normalized_w_balance_sheet.html">Repo Rates Normalized with Balance Sheet</a></li>
+<li class="toctree-l1"><a class="reference internal" href="P2.bank_fragility.html">Bank Fragility</a></li>
+<li class="toctree-l1"><a class="reference internal" href="P3.bank_losses.html">Bank Losses</a></li>
 </ul>
 
     </div>
@@ -227,7 +229,7 @@ const thebe_selector_output = ".output, .cell_output"
       
       
       
-      <li><a href="../_sources/dataframes/repo_public_relative_fed.md" target="_blank"
+      <li><a href="../_sources/charts/repo_rates_normalized.md" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -298,9 +300,7 @@ document.write(`
   </button>
 `);
 </script>
-<label class="sidebar-toggle secondary-toggle btn btn-sm" for="__secondary"title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="fa-solid fa-list"></span>
-</label>
+
 </div></div>
       
     </div>
@@ -311,21 +311,11 @@ document.write(`
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Description</h1>
+    <h1>Repo Rates Normalized</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
-            <div>
-                <h2> Contents </h2>
-            </div>
-            <nav aria-label="Page">
-                <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Description</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#data-dictionary">Data Dictionary</a></li>
-</ul>
-
-            </nav>
         </div>
     </div>
 </div>
@@ -335,29 +325,21 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="description">
-<h1>Description<a class="headerlink" href="#description" title="Permalink to this heading">#</a></h1>
-<p>This dataframe contains, among other things,repo rates relative the midpoint of the Federal Funds target range. The shaded area shows the Federal Funds target range. During 2019, the Secured Overnight Financing Rate (SOFR), a broad measure of the cost of borrowing cash overnight collateralized by Treasury securities via repurchase agreements, often exceeded the upper limit of the Federal Funds target range. Since SOFR does not extend back further than 2017, we use the average repo rate in the triparty repo market whenever SOFR is unavailable.</p>
-</section>
-<section id="data-dictionary">
-<h1>Data Dictionary<a class="headerlink" href="#data-dictionary" title="Permalink to this heading">#</a></h1>
-<ul class="simple">
-<li><p><strong>DATE</strong>: <code class="docutils literal notranslate"><span class="pre">datetime64[ns]</span></code></p></li>
-<li><p><strong>target_midpoint</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code></p></li>
-<li><p><strong>Fed_Funds_Target_Upper</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Upper limit rate less the Fed’s target midpoint rate</p></li>
-<li><p><strong>Fed_Funds_Target_Lower</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Lower limit rate less the Fed’s target midpoint rate</p></li>
-<li><p><strong>Tri_Party_Overnight_Average_Rate</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Triparty average rate less the Fed’s target midpoint rate</p></li>
-<li><p><strong>EFFR</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Effective federal funds rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>Interest_on_Reserves</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Interest on reserve balances (backfilled with interest on excess reserves) rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>ON_RRP_Facility_Rate</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> O/N Reserve Repurchase agreement facility rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>SOFR</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> SOFR, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>SOFR_extended_with_Triparty</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> SOFR, backfilled with the average triparty rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>FNYR_BGCR_A</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Broad General Collateral Rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>FNYR_TGCR_A</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Triparty general collateral rate, less the Fed’s target midpoint rate</p></li>
-<li><p><strong>Total_Reserves_over_Currency</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Reserves of Depository Institutions: Total, divided by currency in circulation</p></li>
-<li><p><strong>Total_Reserves_over_GDP</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Reserves of Depository Institutions: Total, divided by nominal GDP</p></li>
-<li><p><strong>Fed_Balance_Sheet_over_GDP</strong>: <code class="docutils literal notranslate"><span class="pre">float64</span></code> Size of Fed’s balance sheet divided by nominal GDP</p></li>
-</ul>
+  <section class="tex2jax_ignore mathjax_ignore" id="repo-rates-normalized">
+<h1>Repo Rates Normalized<a class="headerlink" href="#repo-rates-normalized" title="Permalink to this heading">#</a></h1>
+<p><strong>Description:</strong> This chat plots repo rates relative the midpoint of the Federal Funds target range. The shaded area shows the Federal Funds target range. During 2019, the Secured Overnight Financing Rate (SOFR), a broad measure of the cost of borrowing cash overnight collateralized by Treasury securities via repurchase agreements, often exceeded the upper limit of the Federal Funds target range. Since SOFR does not extend back further than 2017, we use the average repo rate in the triparty repo market whenever SOFR is unavailable.</p>
+<p><strong>Relevance for Financial Stability:</strong> When SOFR exceeds the upper limit of the Federal Funds target range,
+this is indicative of a relative scarcity of liquidity in short term funding markets.</p>
+<p><strong>Direction of Risk:</strong> When repo rates exceed the fed funds target range, risk is higher. Higher relative repo rates are likely more risky that lower relative rates.</p>
+<p><strong>Formulas Used:</strong></p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{align*}
+midpoint &amp;= (upper\_limit - lower\_limit)/2 \\
+relative\_rate &amp;= rate - midpoint
+\end{align*}\end{split}\]</div>
+<p><strong>Data Cleaning Information:</strong> N/A</p>
+<p><strong>Relation to a chart in an OFR public monitor:</strong> N/A</p>
+<p><strong>What does this add that other charts might not?</strong> Repo rates must be measured in relative terms, here relative the prevailing Fed Funds target, to assess risk in short-term funding markets.</p>
 </section>
 
     <script type="text/x-thebe-config">
@@ -373,7 +355,7 @@ document.write(`
         },
         kernelOptions: {
             name: "python3",
-            path: "./dataframes"
+            path: "./charts"
         },
         predefinedOutput: true
     }
@@ -390,29 +372,30 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="repo_rates.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Repo Rates</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="repo_rates_normalized_w_balance_sheet.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Repo Rates Normalized with Balance Sheet</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               
             </div>
             
             
-              
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
-
-
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
-    <i class="fa-solid fa-list"></i> Contents
-  </div>
-  <nav class="bd-toc-nav page-toc">
-    <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Description</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#data-dictionary">Data Dictionary</a></li>
-</ul>
-
-  </nav></div>
-
-</div></div>
               
             
           </div>
