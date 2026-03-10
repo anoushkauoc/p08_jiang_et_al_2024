@@ -8,10 +8,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
+
     - name: Cache Python environment
       id: cache-python-env
       uses: actions/cache@v3
@@ -20,12 +22,30 @@ jobs:
         key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements.txt', '**/.python-version') }}
         restore-keys: |
           ${{ runner.os }}-venv-
+
     - name: Install Python environment
       if: steps.cache-python-env.outputs.cache-hit != 'true'
       run: |
         python -m venv .venv
         source .venv/bin/activate
         pip install -r requirements.txt
+
+    - name: Write .env
+      run: |
+        cat > .env <<EOF
+        DATA_DIR=_data
+        OUTPUT_DIR=_output
+        REPORT_DATE=12312025
+        REPORT_DATE_SLASH=12/31/2025
+        MARKET_START_DATE=2024-12-31
+        MARKET_END_DATE=2025-12-31
+        EOF
+
+    - name: Build project outputs
+      run: |
+        source .venv/bin/activate
+        doit
+
     - name: Test with pytest
       run: |
         source .venv/bin/activate
