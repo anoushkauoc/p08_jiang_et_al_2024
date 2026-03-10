@@ -33,7 +33,14 @@ jobs:
       - name: Install Chrome for Selenium
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+          sudo apt-get install -y chromium-browser chromium-chromedriver || sudo apt-get install -y chromium chromium-driver
+          if [ -f /usr/bin/chromium-browser ]; then
+            sudo ln -sf /usr/bin/chromium-browser /usr/bin/google-chrome
+          elif [ -f /usr/bin/chromium ]; then
+            sudo ln -sf /usr/bin/chromium /usr/bin/google-chrome
+          fi
+          which google-chrome || true
+          which chromedriver || true
 
       - name: Write .env
         run: |
