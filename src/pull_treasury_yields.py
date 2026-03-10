@@ -7,7 +7,14 @@ import time
 import pandas as pd
 import requests
 
-from settings import config
+# Optional settings.config; if unavailable, uses a simple fallback
+try:
+    from settings import config
+except Exception:
+    def config(key: str) -> str:
+        if key == "DATA_DIR":
+            return "./_data"
+        raise KeyError(key)
 
 DATA_DIR = Path(config("DATA_DIR"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -24,6 +31,50 @@ SERIES = {
 }
 
 BASE_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?cosd=1900-01-01&id={series}"
+
+
+def _normalize_dataframe(df: pd.DataFrame, series_code: str) -> pd.DataFrame:
+    """
+    Normalize a single series dataframe to have:
+    - date (datetime)
+    - value (float)
+    - a column named after the series code in lowercase (e.g., dgs1)
+    """
+    df = df.copy()
+    df.columns = [col.lower() for col in df.columns]
+
+    target_col = series_code.lower()
+
+    # Map value column
+    if target_col in df.columns:
+        df = df.rename(columns={target_col: "value"})
+    elif "value" in df.columns:
+        pass
+    else:
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        date_cols = [c for c in df.columns if "date" in c]
+        candidate = [c for c in numeric_cols if c not in date_cols]
+        if candidate:
+            df = df.rename(columns={candidate[0]: "value"})
+        else:
+            raise ValueError(f"Could not locate a numeric value column for {series_code}")
+
+    # Ensure date column exists
+    if "date" not in df.columns:
+        possible_date_cols = [c for c in df.columns if "date" in c or "time" in c]
+        if possible_date_cols:
+            df = df.rename(columns={possible_date_cols[0]: "date"})
+        else:
+            raise ValueError(f"Could not locate a date column for {series_code}")
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
+    df = df.dropna(subset=["date", "value"])
+    df = df[["date", "value"]]
+    df = df.rename(columns={"value": series_code.lower()})
+
+    return df
 
 
 def pull(series_code: str, max_retries: int = 2, timeout: int = 15) -> pd.DataFrame:
@@ -45,10 +96,8 @@ def pull(series_code: str, max_retries: int = 2, timeout: int = 15) -> pd.DataFr
 
             df = pd.read_csv(StringIO(resp.text))
             df.columns = [c.lower() for c in df.columns]
-            df = df.rename(columns={series_code.lower(): "value"})
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            df["value"] = pd.to_numeric(df["value"], errors="coerce")
-            df = df.dropna(subset=["date"])
+
+            df = _normalize_dataframe(df, series_code)
             return df
 
         except Exception as e:
@@ -81,8 +130,9 @@ def main() -> None:
 
     for out_name, fred_code in SERIES.items():
         try:
-            df = pull(fred_code).rename(columns={"value": out_name})
+            df = pull(fred_code)
             pulled.append(df)
+            print(f"Pulled {fred_code} -> shape {df.shape}")
         except Exception as e:
             print(f"Skipping {fred_code}: {e}")
 
@@ -92,6 +142,10 @@ def main() -> None:
             out = out.merge(df, on="date", how="outer")
 
         out = out.sort_values("date").drop_duplicates(subset=["date"]).reset_index(drop=True)
+
+        value_cols = [col for col in out.columns if col != "date"]
+        out = out.dropna(subset=value_cols, how="all")
+
         out.to_parquet(OUTPUT_PATH, index=False)
         print(f"Wrote {OUTPUT_PATH} | rows={len(out)} cols={out.shape[1]}")
     else:
