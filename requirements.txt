@@ -39,6 +39,7 @@ jupyterlab
 jupytext
 notebook
 
+selenium
 
 # Documentation/notebook rendering dependencies
 chartbook[all]
