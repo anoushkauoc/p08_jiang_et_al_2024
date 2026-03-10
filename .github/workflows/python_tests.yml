@@ -56,7 +56,7 @@ jobs:
       - name: Build project outputs
         run: |
           source .venv/bin/activate
-          doit
+          doit process_ffiec pull_gsib pull_treasury_yields pull_mbs_etfs compute_market_shocks make_table_1
 
       - name: Test with pytest
         run: |
