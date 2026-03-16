@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -61,14 +59,13 @@ def _fmt_sd(
 
 
 def _fmt_agg_loss_thousands(x: pd.Series) -> str:
-    total_dollars = float(np.nansum(x.values)) * 1000
-    abs_total = abs(total_dollars)
+    total_dollars = abs(float(np.nansum(x.values)) * 1000)
 
-    if abs_total >= 1e12:
+    if total_dollars >= 1e12:
         return f"{total_dollars / 1e12:.1f}T"
-    if abs_total >= 1e9:
+    if total_dollars >= 1e9:
         return f"{total_dollars / 1e9:.1f}B"
-    if abs_total >= 1e6:
+    if total_dollars >= 1e6:
         return f"{total_dollars / 1e6:.1f}M"
     return f"{total_dollars:.0f}"
 
@@ -200,6 +197,15 @@ def main() -> None:
         + banks["loss_res_mtg"]
         + banks["loss_other_loan"]
     )
+
+    for col in [
+        "loss_rmbs",
+        "loss_tsy_other",
+        "loss_res_mtg",
+        "loss_other_loan",
+        "loss_total",
+    ]:
+        banks[col] = banks[col].abs()
 
     banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
 
