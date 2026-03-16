@@ -4,7 +4,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pull_gsib_banks import pull_gsib_list
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "pull_gsib_banks",
+    Path(__file__).resolve().parent / "3_pull_gsib_banks.py"
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+pull_gsib_list = mod.pull_gsib_list
+
 from settings import config
 
 DATA_DIR = Path(config("DATA_DIR"))

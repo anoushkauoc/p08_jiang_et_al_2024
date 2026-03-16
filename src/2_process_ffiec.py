@@ -10,7 +10,17 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from scipy.stats.mstats import winsorize
 
-from pull_gsib_banks import pull_gsib_list
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "pull_gsib_banks",
+    Path(__file__).resolve().parent / "3_pull_gsib_banks.py"
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+pull_gsib_list = mod.pull_gsib_list
+
 from settings import config
 
 DATA_DIR = Path(config("DATA_DIR"))
@@ -936,12 +946,11 @@ def df_to_latex(df, path, column_format=None):
         index=True,
         escape=True,
         column_format=column_format,
-        booktabs=True,
     )
     Path(path).write_text(latex)
     print(f"Saved: {path}")
 
-
+    
 key_rows_a = [
     "Total Asset $", "N Banks", "Cash", "Securities", "Treasury",
     "RMBS", "CMBS", "ABS", "Other Security", "Total Loan",

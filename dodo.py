@@ -2,7 +2,7 @@
 dodo.py — pydoit build file for the Jiang et al. replication project
 
 Pipeline:
-    1_pull_ffiec.py                -> downloads FFIEC zip into _data/
+    1_  pull_ffiec.py                -> downloads FFIEC zip into _data/
     2_process_ffiec.py             -> reads zip, produces figure A1 and Table A1
     3_pull_gsib_banks.py           -> writes GSIB list parquet
     4_pull_mbs_etfs.py             -> writes MBS ETF parquet
@@ -74,11 +74,12 @@ DOIT_CONFIG = {
         "pull_mbs_etfs",
         "compute_market_shocks",
         "make_table_1",
-        "export_tables",
         "export_figures",
         "compile_latex",
     ]
 }
+
+
 
 
 def task_pull_ffiec():
@@ -201,17 +202,15 @@ def task_compile_latex():
     """Compile the LaTeX report to PDF."""
     return {
         "actions": [
-            f"cd {OUT_DIR} && pdflatex -interaction=nonstopmode {REPORT_TEX}",
-            f"cd {OUT_DIR} && pdflatex -interaction=nonstopmode {REPORT_TEX}",
+            f'pdflatex -interaction=nonstopmode -output-directory "{OUT_DIR}" "{REPORT_TEX}"',
+            f'pdflatex -interaction=nonstopmode -output-directory "{OUT_DIR}" "{REPORT_TEX}"',
         ],
-        "task_dep": ["make_table_1", "export_tables", "export_figures"],
+        "task_dep": ["make_table_1"],
         "file_dep": [
             str(REPORT_TEX),
             str(TABLE1_TEX),
             str(SUMMARY_ASSETS_TEX),
             str(FIGURE_A1_PNG),
-            str(FIGURE_ASSET_DIST),
-            str(FIGURE_UNINSURED),
         ],
         "targets": [str(REPORT_PDF)],
         "verbosity": 2,
