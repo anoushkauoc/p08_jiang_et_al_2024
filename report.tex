@@ -28,7 +28,7 @@
     \large Monetary Tightening and U.S. Bank Fragility in 2023 \\[0.5em]
     \normalsize FINM Final Project
 }
-\author{Your Names Here}
+\author{Hashir Bawany and Anoushka Gehani}
 \date{\today}
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -45,6 +45,18 @@ and U.S.\ Bank Fragility in 2023: Mark-to-Market Losses and Uninsured Depositor 
 The paper quantifies the mark-to-market losses incurred by U.S.\ commercial banks as
 interest rates rose sharply in 2022, and assesses which banks faced the greatest risk of
 a depositor run given their levels of uninsured deposits.
+
+Specifically, we replicate the following outputs from the original paper:
+\begin{itemize}
+    \item \textbf{Table 1} --- Mark-to-market losses by bank group, broken down by
+          asset class and bank size category (small, large non-GSIB, and GSIB).
+    \item \textbf{Table A1} --- Balance sheet summary statistics for U.S.\ commercial
+          banks, reporting asset and liability composition as a percentage of total
+          assets across bank size groups.
+    \item \textbf{Figure A1} --- Aggregate U.S.\ banking system balance sheet
+          composition, illustrating the breakdown of assets and liabilities at the
+          system level.
+\end{itemize}
 
 The replication proceeds in three steps: (1) constructing a bank-level balance sheet panel
 from FFIEC Call Report data, (2) estimating mark-to-market losses using market-implied
@@ -103,7 +115,7 @@ winsorized at the 5\% level.
              in asset composition across bank size groups, particularly in securities
              vs.\ loan holdings.}
     \label{tab:table1a_assets}
-    \input{_output/summary_assets.tex}
+    \resizebox{\textwidth}{!}{\input{_output/summary_assets.tex}}
 \end{table}
 
 \begin{table}[H]
@@ -115,7 +127,7 @@ winsorized at the 5\% level.
              et al.: banks with high uninsured deposit ratios face greater run risk
              when mark-to-market losses erode equity.}
     \label{tab:table1a_liab}
-    \input{_output/summary_liabilities.tex}
+    \resizebox{\textwidth}{!}{\input{_output/summary_liabilities.tex}}
 \end{table}
 
 \subsection{Figure 1A: Balance Sheet Composition}
@@ -156,7 +168,7 @@ broken down by bank size group (small, large non-GSIB, and GSIB).
              deposits relative to mark-to-market assets --- the key fragility metric
              in Jiang et al.}
     \label{tab:table1}
-    \input{_output/table_1.tex}
+    \resizebox{\textwidth}{!}{\input{_output/table_1.tex}}
 \end{table}
 
 % ── Section 4: Original Analysis ──────────────────────────────────────────────
@@ -206,20 +218,23 @@ central to the Jiang et al.\ fragility analysis.
 \section{Discussion}
 
 \subsection{Where We Found Success}
-%
-% TODO: Fill in based on your experience. Example prompts:
-% - Which numbers matched well? Which tables were easiest to replicate?
-% - Did the maturity bucket approach for RMBS work cleanly?
-% - Did Table 1 numbers fall within your unit test tolerances?
-%
+
+A key success in this replication was leveraging the prior replication work of
+Xitaaz Rampersad and Samuel Rubidge. While their project sourced data through WRDS,
+we scraped the raw Call Report files directly from the FFIEC website. Once we reformatted
+the raw files to resemble their input structure, the rest of the analysis pipeline ---
+variable construction, bank classification, and mark-to-market loss computation ---
+was relatively straightforward to follow and adapt.
 
 \subsection{Challenges}
-%
-% TODO: Fill in based on your experience. Example prompts:
-% - Were there any MDRM codes that were hard to find or changed across quarters?
-% - How did you handle the stylized maturity weights for Treasuries and loans?
-% - Were there any discrepancies with the paper's numbers and how did you address them?
-%
+
+One significant challenge was scraping the FFIEC website, which does not expose a
+conventional REST API. The site requires interactive browser navigation to select
+report parameters and trigger a download. We circumvented this by automating the
+browser using \texttt{Selenium}, a Python package that programmatically controls a
+Chrome browser instance. This allowed us to replicate the manual download process
+end-to-end, selecting the correct report date, format, and schedules before
+downloading the bulk zip file.
 
 % ── References ────────────────────────────────────────────────────────────────
 \section*{References}
@@ -229,4 +244,4 @@ Jiang, E., Matvos, G., Piskorski, T., \& Seru, A. (2024).
 Mark-to-Market Losses and Uninsured Depositor Runs?}
 Journal of Financial Economics.
 
-\end{document}  
+\end{document}
