@@ -236,6 +236,14 @@ Chrome browser instance. This allowed us to replicate the manual download proces
 end-to-end, selecting the correct report date, format, and schedules before
 downloading the bulk zip file.
 
+Finally, building a fully reproducible pipeline required coordinating multiple
+data sources and intermediate files, including the bank panel dataset, market
+shock estimates, and the GSIB classification. Ensuring that each component was
+loaded, validated, and merged correctly was essential for producing the final
+tables. While the overall structure of the replication followed the original
+project closely, implementing the data pipeline from raw files to final output
+required careful debugging and incremental testing.
+
 % ── References ────────────────────────────────────────────────────────────────
 \section*{References}
 
