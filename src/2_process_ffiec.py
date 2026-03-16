@@ -922,3 +922,57 @@ figures_path = OUTPUT_DIR / f"figure_A1_{REPORT_DATE}.png"
 plt.savefig(figures_path, dpi=150, bbox_inches="tight")
 plt.show()
 print(f"Figure saved -> {figures_path}")
+
+
+
+# Section 11: Export summary stats to LaTeX ────────────────────────────────────
+
+def df_to_latex(df, path, column_format=None):
+    """Save a DataFrame as a booktabs-style .tex file."""
+    n_cols = len(df.columns) + 1
+    if column_format is None:
+        column_format = "l" + "r" * (n_cols - 1)
+    latex = df.to_latex(
+        index=True,
+        escape=True,
+        column_format=column_format,
+        booktabs=True,
+    )
+    Path(path).write_text(latex)
+    print(f"Saved: {path}")
+
+
+key_rows_a = [
+    "Total Asset $", "N Banks", "Cash", "Securities", "Treasury",
+    "RMBS", "CMBS", "ABS", "Other Security", "Total Loan",
+    "Real Estate Loan", "Residential Mortgage", "Fed Funds Sold", "Reverse Repo",
+]
+
+key_rows_b = [
+    "Total Liability", "Domestic Deposit", "Insured Deposit",
+    "Uninsured Deposit", "Foreign Deposit", "Fed Fund Purchase",
+    "Repo", "Total Equity",
+]
+
+for sheet, key_rows, filename in [
+    ("Panel A - Assets", key_rows_a, "summary_assets.tex"),
+    ("Panel B - Liabilities", key_rows_b, "summary_liabilities.tex"),
+]:
+    df = pd.read_excel(summary_path, sheet_name=sheet, index_col=0, header=[0, 1, 2])
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [
+            " ".join(str(c).strip() for c in col if "Unnamed" not in str(c)).strip()
+            for col in df.columns
+        ]
+
+    df = df.reindex([r for r in key_rows if r in df.index])
+    df = df.fillna("")
+
+    df_to_latex(
+        df,
+        OUTPUT_DIR / filename,
+        column_format="l" + "r" * len(df.columns),
+    )
+
+print("LaTeX tables exported.")

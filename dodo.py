@@ -2,13 +2,16 @@
 dodo.py — pydoit build file for the Jiang et al. replication project
 
 Pipeline:
-    1. pull_ffiec_hashir.py         -> downloads FFIEC zip into _data/
-    2. processing_ffiec_data_3.py   -> reads zip, writes bank panel and A1-style outputs
-    3. pull_gsib_banks.py           -> writes GSIB list parquet
-    4. pull_treasury_yields.py      -> writes Treasury yield parquet
-    5. pull_mbs_etfs.py             -> writes MBS ETF parquet
-    6. compute_market_shocks.py     -> writes market shock parquet
-    7. make_table_1.py              -> writes Table 1 csv/tex
+    1_pull_ffiec.py                -> downloads FFIEC zip into _data/
+    2_process_ffiec.py             -> reads zip, produces figure A1 and Table A1
+    3_pull_gsib_banks.py           -> writes GSIB list parquet
+    4_pull_mbs_etfs.py             -> writes MBS ETF parquet
+    7_pull_treasury_yields.py      -> writes Treasury yield parquet
+    8_compute_market_shocks.py     -> writes market shock parquet
+    9_make_table_1.py              -> writes Table 1 csv/tex
+    10_original_fig.py             -> creates original exploratory figures
+    export_tables.py               -> exports summary_assets.tex
+    report.tex                     -> compiled into report.pdf
 
 Usage:
     doit
@@ -36,23 +39,26 @@ load_dotenv(BASE_DIR / ".env")
 REPORT_DATE = os.getenv("REPORT_DATE", "12312025")
 REPORT_DATE_SLASH = os.getenv("REPORT_DATE_SLASH", "12/31/2025")
 
+# FFIEC data
 ZIP_FILE = DATA_DIR / f"FFIEC CDR Call Bulk All Schedules {REPORT_DATE}.zip"
 BANK_PANEL = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
-
-SUMMARY_XLSX = OUT_DIR / f"summary_stats_{REPORT_DATE}.xlsx"
-FIGURE_A1_PNG = OUT_DIR / f"figure_A1_{REPORT_DATE}.png"
-
 GSIB_PARQUET = DATA_DIR / "gsib_list.parquet"
 TREASURY_YIELDS_PARQUET = DATA_DIR / "treasury_yields.parquet"
 MBS_ETF_PARQUET = DATA_DIR / "mbs_etfs.parquet"
 MARKET_SHOCKS_PARQUET = DATA_DIR / "market_shocks.parquet"
 
+# Outputs
+SUMMARY_XLSX = OUT_DIR / f"summary_stats_{REPORT_DATE}.xlsx"
+FIGURE_A1_PNG = OUT_DIR / f"figure_A1_{REPORT_DATE}.png"
+FIGURE_ASSET_DIST = OUT_DIR / f"figure_asset_dist_{REPORT_DATE}.png"
+FIGURE_UNINSURED = OUT_DIR / f"figure_uninsured_ratio_{REPORT_DATE}.png"
 TABLE1_CSV = OUT_DIR / "table_1.csv"
 TABLE1_TEX = OUT_DIR / "table_1.tex"
+SUMMARY_ASSETS_TEX = OUT_DIR / "summary_assets.tex"
 
-TABLEA1_CSV = OUT_DIR / "table_A1.csv"
-TABLEA1_TEX = OUT_DIR / "table_A1.tex"
-FIGUREA1_FINAL = OUT_DIR / "figure_A1_final.png"
+# LaTeX
+REPORT_TEX = BASE_DIR / "report.tex"
+REPORT_PDF = OUT_DIR / "report.pdf"
 
 
 def _run(script_name: str) -> str:
@@ -68,6 +74,9 @@ DOIT_CONFIG = {
         "pull_mbs_etfs",
         "compute_market_shocks",
         "make_table_1",
+        "export_tables",
+        "export_figures",
+        "compile_latex",
     ]
 }
 
@@ -75,8 +84,8 @@ DOIT_CONFIG = {
 def task_pull_ffiec():
     """Download FFIEC Call Report zip from FFIEC."""
     return {
-        "actions": [_run("pull_ffiec_hashir.py")],
-        "file_dep": [str(SRC_DIR / "pull_ffiec_hashir.py")],
+        "actions": [_run("1_pull_ffiec.py")],
+        "file_dep": [str(SRC_DIR / "1_pull_ffiec.py")],
         "targets": [str(ZIP_FILE)],
         "verbosity": 2,
         "clean": True,
@@ -84,38 +93,34 @@ def task_pull_ffiec():
 
 
 def task_process_ffiec():
-    """Process FFIEC zip into bank panel parquet and summary outputs."""
+    """Process FFIEC zip into bank panel parquet, summary stats, and Figure A1."""
     return {
-        "actions": [_run("processing_ffiec_data_3.py")],
-        "task_dep": ["pull_ffiec"],
+        "actions": [_run("2_process_ffiec.py")],
+        "task_dep": ["pull_ffiec", "pull_gsib"],
         "file_dep": [
             str(ZIP_FILE),
-            str(SRC_DIR / "processing_ffiec_data_3.py"),
-            str(SRC_DIR / "pull_gsib_banks.py"),
+            str(GSIB_PARQUET),
+            str(SRC_DIR / "2_process_ffiec.py"),
         ],
-        "targets": [str(BANK_PANEL), str(SUMMARY_XLSX), str(FIGURE_A1_PNG)],
+        "targets": [
+            str(BANK_PANEL),
+            str(SUMMARY_XLSX),
+            str(FIGURE_A1_PNG),
+            str(OUT_DIR / "summary_assets.tex"),
+            str(OUT_DIR / "summary_liabilities.tex"),
+        ],
         "verbosity": 2,
         "clean": True,
     }
+
 
 
 def task_pull_gsib():
     """Create GSIB list parquet used for bank classification."""
     return {
-        "actions": [_run("pull_gsib_banks.py")],
-        "file_dep": [str(SRC_DIR / "pull_gsib_banks.py")],
+        "actions": [_run("3_pull_gsib_banks.py")],
+        "file_dep": [str(SRC_DIR / "3_pull_gsib_banks.py")],
         "targets": [str(GSIB_PARQUET)],
-        "verbosity": 2,
-        "clean": True,
-    }
-
-
-def task_pull_treasury_yields():
-    """Pull Treasury yield data used to construct bucket-specific shocks."""
-    return {
-        "actions": [_run("pull_treasury_yields.py")],
-        "file_dep": [str(SRC_DIR / "pull_treasury_yields.py")],
-        "targets": [str(TREASURY_YIELDS_PARQUET)],
         "verbosity": 2,
         "clean": True,
     }
@@ -124,9 +129,20 @@ def task_pull_treasury_yields():
 def task_pull_mbs_etfs():
     """Pull MBS ETF prices used for RMBS / CMBS market proxies."""
     return {
-        "actions": [_run("pull_mbs_etfs.py")],
-        "file_dep": [str(SRC_DIR / "pull_mbs_etfs.py")],
+        "actions": [_run("4_pull_mbs_etfs.py")],
+        "file_dep": [str(SRC_DIR / "4_pull_mbs_etfs.py")],
         "targets": [str(MBS_ETF_PARQUET)],
+        "verbosity": 2,
+        "clean": True,
+    }
+
+
+def task_pull_treasury_yields():
+    """Pull Treasury yield data used to construct bucket-specific shocks."""
+    return {
+        "actions": [_run("7_pull_treasury_yields.py")],
+        "file_dep": [str(SRC_DIR / "7_pull_treasury_yields.py")],
+        "targets": [str(TREASURY_YIELDS_PARQUET)],
         "verbosity": 2,
         "clean": True,
     }
@@ -135,12 +151,12 @@ def task_pull_mbs_etfs():
 def task_compute_market_shocks():
     """Compute maturity-specific market shocks from Treasury yields and MBS ETF data."""
     return {
-        "actions": [_run("compute_market_shocks.py")],
+        "actions": [_run("8_compute_market_shocks.py")],
         "task_dep": ["pull_treasury_yields", "pull_mbs_etfs"],
         "file_dep": [
             str(TREASURY_YIELDS_PARQUET),
             str(MBS_ETF_PARQUET),
-            str(SRC_DIR / "compute_market_shocks.py"),
+            str(SRC_DIR / "8_compute_market_shocks.py"),
         ],
         "targets": [str(MARKET_SHOCKS_PARQUET)],
         "verbosity": 2,
@@ -151,13 +167,13 @@ def task_compute_market_shocks():
 def task_make_table_1():
     """Build Table 1 outputs from processed bank panel and computed market shocks."""
     return {
-        "actions": [_run("make_table_1.py")],
+        "actions": [_run("9_make_table_1.py")],
         "task_dep": ["process_ffiec", "pull_gsib", "compute_market_shocks"],
         "file_dep": [
             str(BANK_PANEL),
             str(GSIB_PARQUET),
             str(MARKET_SHOCKS_PARQUET),
-            str(SRC_DIR / "make_table_1.py"),
+            str(SRC_DIR / "9_make_table_1.py"),
         ],
         "targets": [str(TABLE1_CSV), str(TABLE1_TEX)],
         "verbosity": 2,
@@ -165,20 +181,62 @@ def task_make_table_1():
     }
 
 
+
+def task_export_figures():
+    """Export original exploratory figures for the LaTeX report."""
+    return {
+        "actions": [_run("10_original_fig.py")],
+        "task_dep": ["process_ffiec"],
+        "file_dep": [
+            str(BANK_PANEL),
+            str(SRC_DIR / "10_original_fig.py"),
+        ],
+        "targets": [str(FIGURE_ASSET_DIST), str(FIGURE_UNINSURED)],
+        "verbosity": 2,
+        "clean": True,
+    }
+
+
+def task_compile_latex():
+    """Compile the LaTeX report to PDF."""
+    return {
+        "actions": [
+            f"cd {OUT_DIR} && pdflatex -interaction=nonstopmode {REPORT_TEX}",
+            f"cd {OUT_DIR} && pdflatex -interaction=nonstopmode {REPORT_TEX}",
+        ],
+        "task_dep": ["make_table_1", "export_tables", "export_figures"],
+        "file_dep": [
+            str(REPORT_TEX),
+            str(TABLE1_TEX),
+            str(SUMMARY_ASSETS_TEX),
+            str(FIGURE_A1_PNG),
+            str(FIGURE_ASSET_DIST),
+            str(FIGURE_UNINSURED),
+        ],
+        "targets": [str(REPORT_PDF)],
+        "verbosity": 2,
+        "clean": True,
+    }
+
+
 def task_clean_outputs():
+    """Remove all generated data and output files."""
     files_to_remove = [
         ZIP_FILE,
         BANK_PANEL,
         SUMMARY_XLSX,
         FIGURE_A1_PNG,
+        FIGURE_ASSET_DIST,
+        FIGURE_UNINSURED,
         GSIB_PARQUET,
         TREASURY_YIELDS_PARQUET,
         MBS_ETF_PARQUET,
         MARKET_SHOCKS_PARQUET,
         TABLE1_CSV,
         TABLE1_TEX,
+        SUMMARY_ASSETS_TEX,
+        REPORT_PDF,
     ]
-
     return {
         "actions": [f"rm -f {' '.join(str(p) for p in files_to_remove)}"],
         "verbosity": 2,
@@ -186,6 +244,7 @@ def task_clean_outputs():
 
 
 def task_charts():
+    """Build jupyter-book chartbook."""
     return {
         "actions": [
             "jupyter-book build docs_src",

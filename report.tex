@@ -1,0 +1,232 @@
+\documentclass[12pt]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{float}
+\usepackage{lmodern}
+
+\onehalfspacing
+
+% ── Auto-generated inputs ─────────────────────────────────────────────────────
+% _output/table_1.tex              -> produced by 9_make_table_1.py
+% _output/summary_assets.tex       -> produced by 2_process_ffiec.py
+% _output/summary_liabilities.tex  -> produced by 2_process_ffiec.py
+% Do NOT edit these files manually.
+
+% ── Title ─────────────────────────────────────────────────────────────────────
+\title{
+    \textbf{Replication of Jiang et al. (2024):} \\
+    \large Monetary Tightening and U.S. Bank Fragility in 2023 \\[0.5em]
+    \normalsize FINM Final Project
+}
+\author{Your Names Here}
+\date{\today}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ── Section 1: Project Overview ───────────────────────────────────────────────
+\section{Project Overview}
+
+This report replicates the core results of Jiang et al.\ (2024), ``Monetary Tightening
+and U.S.\ Bank Fragility in 2023: Mark-to-Market Losses and Uninsured Depositor Runs?''
+The paper quantifies the mark-to-market losses incurred by U.S.\ commercial banks as
+interest rates rose sharply in 2022, and assesses which banks faced the greatest risk of
+a depositor run given their levels of uninsured deposits.
+
+The replication proceeds in three steps: (1) constructing a bank-level balance sheet panel
+from FFIEC Call Report data, (2) estimating mark-to-market losses using market-implied
+shocks to Treasury and MBS prices, and (3) computing aggregate and bank-group-level
+loss statistics that match those reported in the paper's Table~1.
+
+% ── Section 2: Data Sources ───────────────────────────────────────────────────
+\section{Data Sources}
+
+\subsection{FFIEC Call Reports}
+The primary data source is the FFIEC CDR (Central Data Repository) Call Report bulk
+download for the quarter ending December 31, 2025. We use the following schedules:
+
+\begin{itemize}
+    \item \textbf{Schedule RC} --- Balance sheet totals (total assets, total liabilities,
+          equity).
+    \item \textbf{Schedule RC-B} --- Securities holdings broken into asset class and
+          remaining maturity buckets (the key input for RMBS mark-to-market losses).
+    \item \textbf{Schedule RC-C} --- Loan portfolio by type (residential mortgage,
+          commercial real estate, C\&I, consumer).
+    \item \textbf{Schedule RC-E} --- Deposit liabilities, including the insured/uninsured
+          breakdown used to measure run risk.
+\end{itemize}
+
+Data are reported in thousands of dollars. All MDRM codes were cross-referenced against
+the FFIEC data dictionary. Banks are identified by their RSSD ID (\texttt{rssd9001}).
+
+\subsection{Market Shock Estimates}
+Interest rate shocks are derived from changes in the Treasury yield curve and
+MBS ETF prices between the start of 2022 and the report date. These shocks
+are applied to each bank's maturity-bucketed holdings to compute simulated
+mark-to-market losses.
+
+\subsection{GSIB List}
+Global Systemically Important Banks (GSIBs) are identified using the Federal Reserve's
+published list and matched to Call Report data via RSSD ID.
+
+% ── Section 3: Updated Results ────────────────────────────────────────────────
+\section{Updated Results}
+
+\subsection{Table 1A: Balance Sheet Summary Statistics}
+
+Table~\ref{tab:table1a_assets} and Table~\ref{tab:table1a_liab} replicate Table~1A
+from Jiang et al.\ (2024), updated through December 31, 2025. They report summary
+statistics for the asset and liability composition of U.S.\ commercial banks, broken
+down by bank size group. Values are expressed as a percentage of total assets and are
+winsorized at the 5\% level.
+
+\begin{table}[H]
+    \centering
+    \caption{Asset summary statistics by bank size group, updated through December 31,
+             2025 (Replication of Jiang et al.\ Table 1A --- Panel A). All values are
+             expressed as a percentage of total assets and winsorized at the 5\% level.
+             Small banks are below \$1.384B in assets; GSIBs are the eight U.S.\
+             globally systemically important banks. The table highlights stark differences
+             in asset composition across bank size groups, particularly in securities
+             vs.\ loan holdings.}
+    \label{tab:table1a_assets}
+    \input{_output/summary_assets.tex}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{Liability summary statistics by bank size group, updated through December
+             31, 2025 (Replication of Jiang et al.\ Table 1A --- Panel B). All values
+             are expressed as a percentage of total assets and winsorized at the 5\%
+             level. The uninsured deposit row is the key fragility measure in Jiang
+             et al.: banks with high uninsured deposit ratios face greater run risk
+             when mark-to-market losses erode equity.}
+    \label{tab:table1a_liab}
+    \input{_output/summary_liabilities.tex}
+\end{table}
+
+\subsection{Figure 1A: Balance Sheet Composition}
+
+Figure~\ref{fig:balance_sheet} replicates Figure~1A from Jiang et al.\ (2024), updated
+through December 31, 2025. On the asset side, securities and real estate loans together
+account for the majority of bank assets. On the liability side, the split between insured
+and uninsured deposits is the key determinant of run risk: banks with a higher share of
+uninsured deposits face greater fragility when mark-to-market losses erode their equity.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{_output/figure_A1_12312025.png}
+    \caption{Aggregate U.S.\ banking system balance sheet composition as of December
+             31, 2025 (Replication of Jiang et al.\ Figure 1A). The asset panel (top)
+             shows the breakdown into cash, securities, real estate loans, and other
+             assets. The liability panel (bottom) distinguishes insured deposits,
+             uninsured deposits, equity, and other liabilities. The dominant share of
+             uninsured deposits highlights the systemic fragility channel emphasized
+             in Jiang et al.}
+    \label{fig:balance_sheet}
+\end{figure}
+
+\subsection{Table 1: Mark-to-Market Losses by Bank Group}
+
+Table~\ref{tab:table1} replicates Table~1 from Jiang et al.\ (2024), updated through
+December 31, 2025. It reports simulated mark-to-market losses as a percentage of assets,
+broken down by bank size group (small, large non-GSIB, and GSIB).
+
+\begin{table}[H]
+    \centering
+    \caption{Mark-to-Market Losses by Bank Group, updated through December 31, 2025
+             (Replication of Jiang et al.\ Table 1). Losses are expressed as a
+             percentage of total assets. Small banks are those with total assets below
+             \$1.384B; GSIBs are the eight U.S.\ globally systemically important banks.
+             All other banks are classified as Large. The table shows the distribution
+             of unrealized losses across the banking system and the share of uninsured
+             deposits relative to mark-to-market assets --- the key fragility metric
+             in Jiang et al.}
+    \label{tab:table1}
+    \input{_output/table_1.tex}
+\end{table}
+
+% ── Section 4: Original Analysis ──────────────────────────────────────────────
+\section{Original Analysis}
+
+\subsection{Bank Asset Distribution}
+
+Figure~\ref{fig:asset_dist} plots the distribution of total assets across all U.S.\
+commercial banks on a log scale. The vast majority of banks are small community banks
+with under \$1B in assets, while a small number of GSIBs hold a disproportionate share
+of system-wide assets. The \$1.384B threshold used to classify small vs.\ large banks
+is shown as a dashed red line.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{_output/figure_asset_dist_12312025.png}
+    \caption{Distribution of total assets across U.S.\ commercial banks (log scale)
+             as of December 31, 2025. The red dashed line marks the \$1.384B threshold
+             separating small banks from large non-GSIB banks. While most banks by
+             count are small community banks, total system assets are heavily
+             concentrated in a handful of large institutions. This skewness motivates
+             the separate analysis of small, large, and GSIB bank groups in Jiang et al.}
+    \label{fig:asset_dist}
+\end{figure}
+
+\subsection{Uninsured Deposit Exposure}
+
+Figure~\ref{fig:uninsured} shows the distribution of uninsured deposits as a share of
+total assets across all U.S.\ commercial banks. There is substantial heterogeneity:
+some banks have nearly all deposits uninsured, while others --- primarily community
+banks serving retail depositors --- have very low uninsured ratios. This variation is
+central to the Jiang et al.\ fragility analysis.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{_output/figure_uninsured_ratio_12312025.png}
+    \caption{Distribution of uninsured deposits as a percentage of total assets across
+             U.S.\ commercial banks as of December 31, 2025. Banks with high uninsured
+             deposit ratios face greater run risk when mark-to-market losses are large,
+             since uninsured depositors have strong incentives to withdraw before FDIC
+             coverage limits are breached. The wide dispersion across banks highlights
+             that run risk is highly heterogeneous across the banking system.}
+    \label{fig:uninsured}
+\end{figure}
+
+% ── Section 5: Discussion ─────────────────────────────────────────────────────
+\section{Discussion}
+
+\subsection{Where We Found Success}
+%
+% TODO: Fill in based on your experience. Example prompts:
+% - Which numbers matched well? Which tables were easiest to replicate?
+% - Did the maturity bucket approach for RMBS work cleanly?
+% - Did Table 1 numbers fall within your unit test tolerances?
+%
+
+\subsection{Challenges}
+%
+% TODO: Fill in based on your experience. Example prompts:
+% - Were there any MDRM codes that were hard to find or changed across quarters?
+% - How did you handle the stylized maturity weights for Treasuries and loans?
+% - Were there any discrepancies with the paper's numbers and how did you address them?
+%
+
+% ── References ────────────────────────────────────────────────────────────────
+\section*{References}
+
+Jiang, E., Matvos, G., Piskorski, T., \& Seru, A. (2024).
+\textit{Monetary Tightening and U.S.\ Bank Fragility in 2023:
+Mark-to-Market Losses and Uninsured Depositor Runs?}
+Journal of Financial Economics.
+
+\end{document}  
