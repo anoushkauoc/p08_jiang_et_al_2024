@@ -2,152 +2,379 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from pull_gsib_banks import pull_gsib_list
 from settings import config
 
 DATA_DIR = Path(config("DATA_DIR"))
-MARKET_START_DATE = pd.to_datetime(config("MARKET_START_DATE"))
-MARKET_END_DATE = pd.to_datetime(config("MARKET_END_DATE"))
+OUTPUT_DIR = Path(config("OUTPUT_DIR"))
+REPORT_DATE = config("REPORT_DATE")
+
+# Call Report variables are typically in thousands of dollars
+SMALL_CUTOFF = 1.384e6  # = $1.384B in thousands
+
+# Prefer paper-style bucket shock names, but allow legacy names too
+BUCKETS = [
+    ("lt1y", ("d_tsy_lt1y", "d_tsy_1Y")),
+    ("1_3y", ("d_tsy_1_3y", "d_tsy_3Y")),
+    ("3_5y", ("d_tsy_3_5y", "d_tsy_5Y")),
+    ("5_10y", ("d_tsy_5_10y", "d_tsy_10Y")),
+    ("10_15y", ("d_tsy_10_15y", "d_tsy_20Y")),
+    ("15plus", ("d_tsy_15plus", "d_tsy_30Y")),
+]
 
 
-def _nearest_row(df: pd.DataFrame, target_date: pd.Timestamp) -> pd.Series:
-    temp = df.copy()
-    temp["date"] = pd.to_datetime(temp["date"])
-    temp = temp.dropna(subset=["date"])
-    temp["dist"] = (temp["date"] - target_date).abs()
-    return temp.sort_values("dist").iloc[0]
+def _safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
+    out = a / b.replace({0: np.nan})
+    return out.replace([np.inf, -np.inf], np.nan)
+
+
+def _fmt_mean(
+    x: pd.Series,
+    scale: float = 1.0,
+    digits: int = 1,
+    suffix: str = "",
+) -> str:
+    v = (x.dropna() * scale).astype(float)
+    if len(v) == 0:
+        return ""
+    mean = np.nanmean(v)
+    return f"{mean:.{digits}f}{suffix}"
+
+
+def _fmt_sd(
+    x: pd.Series,
+    scale: float = 1.0,
+    digits: int = 1,
+) -> str:
+    v = (x.dropna() * scale).astype(float)
+    if len(v) <= 1:
+        return ""
+    sd = np.nanstd(v, ddof=1)
+    return f"({sd:,.{digits}f})"
+
+
+def _fmt_agg_loss_thousands(x: pd.Series) -> str:
+    """
+    Input is assumed to be in thousands of dollars.
+    Convert to dollars for display.
+    """
+    total_dollars = float(np.nansum(x.values)) * 1000
+    abs_total = abs(total_dollars)
+
+    if abs_total >= 1e12:
+        return f"{total_dollars / 1e12:.1f}T"
+    if abs_total >= 1e9:
+        return f"{total_dollars / 1e9:.1f}B"
+    if abs_total >= 1e6:
+        return f"{total_dollars / 1e6:.1f}M"
+    return f"{total_dollars:.0f}"
+
+
+def _format_table_latex(table: pd.DataFrame) -> str:
+    latex = table.to_latex(
+        escape=False,
+        column_format="lcccc",
+    )
+    latex = latex.replace("\\toprule", "\\hline")
+    latex = latex.replace("\\midrule", "\\hline")
+    latex = latex.replace("\\bottomrule", "\\hline")
+    return latex
+
+
+def _resolve_shock_col(shocks: pd.Series, candidates: tuple[str, ...]) -> str:
+    for c in candidates:
+        if c in shocks.index:
+            return c
+    raise KeyError(f"Could not find any of these shock columns: {candidates}")
 
 
 def main() -> None:
-    yields_path = DATA_DIR / "treasury_yields.parquet"
-    mbs_path = DATA_DIR / "mbs_etfs.parquet"
+    bank_panel_path = DATA_DIR / f"bank_panel_{REPORT_DATE}.parquet"
+    shocks_path = DATA_DIR / "market_shocks.parquet"
 
-    if not yields_path.exists():
-        raise FileNotFoundError(f"Missing Treasury yields file: {yields_path}")
-    if not mbs_path.exists():
-        raise FileNotFoundError(f"Missing MBS ETF file: {mbs_path}")
+    if not bank_panel_path.exists():
+        raise FileNotFoundError(f"Missing bank panel: {bank_panel_path}")
+    if not shocks_path.exists():
+        raise FileNotFoundError(f"Missing market shocks: {shocks_path}")
 
-    yields = pd.read_parquet(yields_path)
-    mbs = pd.read_parquet(mbs_path)
+    banks = pd.read_parquet(bank_panel_path)
+    shocks = pd.read_parquet(shocks_path).iloc[0]
 
-    if yields.empty:
-        raise ValueError(
-            f"Treasury yields file exists but is empty: {yields_path}. "
-            "The treasury pull likely failed."
+    required_base_cols = [
+        "rssd_id_call",
+        "Total Asset",
+        "Uninsured Deposit",
+    ]
+
+    required_bucket_cols: list[str] = []
+    for suffix, _ in BUCKETS:
+        required_bucket_cols.extend(
+            [
+                f"rmbs_{suffix}",
+                f"treasury_{suffix}",
+                f"other_assets_{suffix}",
+                f"res_mtg_{suffix}",
+                f"other_loan_{suffix}",
+            ]
         )
 
-    yields["date"] = pd.to_datetime(yields["date"], errors="coerce")
-    mbs["date"] = pd.to_datetime(mbs["date"], errors="coerce")
+    required_cols = required_base_cols + required_bucket_cols
+    missing = [c for c in required_cols if c not in banks.columns]
+    if missing:
+        raise ValueError(
+            "Missing required columns for bucket-based Table 1:\n"
+            + ", ".join(missing)
+        )
 
-    # Rename FRED-style columns to tenor labels expected below
-    yields = yields.rename(
-        columns={
-            "dgs1": "1Y",
-            "dgs3": "3Y",
-            "dgs5": "5Y",
-            "dgs10": "10Y",
-            "dgs20": "20Y",
-            "dgs30": "30Y",
+    # Clean core variables
+    banks["rssd_id_call"] = pd.to_numeric(
+        banks["rssd_id_call"], errors="coerce"
+    ).astype("Int64")
+    banks["Total Asset"] = pd.to_numeric(banks["Total Asset"], errors="coerce")
+    banks["Uninsured Deposit"] = pd.to_numeric(
+        banks["Uninsured Deposit"], errors="coerce"
+    )
+
+    # GSIB identification
+    gsib_df = pull_gsib_list()
+    gsib_ids = set(
+        pd.to_numeric(gsib_df["rssd_id_call"], errors="coerce")
+        .dropna()
+        .astype(int)
+    )
+    banks["is_gsib"] = banks["rssd_id_call"].isin(gsib_ids).astype(int)
+
+    # Size groups
+    banks["size_group"] = "large_non_gsib"
+    banks.loc[banks["Total Asset"] < SMALL_CUTOFF, "size_group"] = "small"
+    banks.loc[banks["is_gsib"] == 1, "size_group"] = "gsib"
+
+    if "rmbs_multiplier" not in shocks.index:
+        raise KeyError("market_shocks.parquet is missing 'rmbs_multiplier'")
+
+    rmbs_multiplier = float(shocks["rmbs_multiplier"])
+
+    print("\nUsing shocks:")
+    resolved_shocks: dict[str, float] = {}
+    for suffix, candidates in BUCKETS:
+        shock_col = _resolve_shock_col(shocks, candidates)
+        shock_val = float(shocks[shock_col])
+        resolved_shocks[suffix] = shock_val
+        print(f"  {suffix:<8} <- {shock_col:<15} = {shock_val:.6f}")
+    print(f"  rmbs_multiplier = {rmbs_multiplier:.6f}")
+
+    # Convert all exposure columns to numeric once
+    for suffix, _ in BUCKETS:
+        for prefix in ["rmbs", "treasury", "other_assets", "res_mtg", "other_loan"]:
+            col = f"{prefix}_{suffix}"
+            banks[col] = pd.to_numeric(banks[col], errors="coerce").fillna(0.0)
+
+    # Exposure totals by category
+    banks["exp_rmbs"] = 0.0
+    banks["exp_treasury"] = 0.0
+    banks["exp_other_assets"] = 0.0
+    banks["exp_res_mtg"] = 0.0
+    banks["exp_other_loan"] = 0.0
+
+    # Loss totals by category
+    banks["loss_rmbs"] = 0.0
+    banks["loss_tsy_other"] = 0.0
+    banks["loss_res_mtg"] = 0.0
+    banks["loss_other_loan"] = 0.0
+
+    for suffix, _ in BUCKETS:
+        shock = float(resolved_shocks[suffix])
+
+        banks["exp_rmbs"] += banks[f"rmbs_{suffix}"]
+        banks["exp_treasury"] += banks[f"treasury_{suffix}"]
+        banks["exp_other_assets"] += banks[f"other_assets_{suffix}"]
+        banks["exp_res_mtg"] += banks[f"res_mtg_{suffix}"]
+        banks["exp_other_loan"] += banks[f"other_loan_{suffix}"]
+
+        banks["loss_rmbs"] += banks[f"rmbs_{suffix}"] * shock * rmbs_multiplier
+        banks["loss_res_mtg"] += banks[f"res_mtg_{suffix}"] * shock * rmbs_multiplier
+
+        banks["loss_tsy_other"] += (
+            banks[f"treasury_{suffix}"] * shock
+            + banks[f"other_assets_{suffix}"] * shock
+        )
+
+        banks["loss_other_loan"] += banks[f"other_loan_{suffix}"] * shock
+
+    banks["exp_tsy_other"] = banks["exp_treasury"] + banks["exp_other_assets"]
+
+    banks["loss_total"] = (
+        banks["loss_rmbs"]
+        + banks["loss_tsy_other"]
+        + banks["loss_res_mtg"]
+        + banks["loss_other_loan"]
+    )
+
+    # Mark-to-market assets
+    banks["mm_assets"] = banks["Total Asset"] - banks["loss_total"]
+
+    # Diagnostics
+    print("\nNumber of banks by group:")
+    print(banks["size_group"].value_counts(dropna=False))
+
+    print("\nRaw exposure totals by category:")
+    for col in [
+        "exp_rmbs",
+        "exp_tsy_other",
+        "exp_res_mtg",
+        "exp_other_loan",
+    ]:
+        print(f"{col:<18} {banks[col].sum():,.2f}")
+
+    print("\nLoss totals by category:")
+    print(
+        banks[
+            ["loss_rmbs", "loss_tsy_other", "loss_res_mtg", "loss_other_loan"]
+        ].sum()
+    )
+
+    print("\nBanks with non-positive mm_assets:")
+    print(int((banks["mm_assets"] <= 0).sum()))
+
+    # Shares should be exposure shares, not loss shares
+    # Using MM assets as denominator matches the paper structure better
+    banks["share_rmbs"] = 100 * _safe_div(banks["exp_rmbs"], banks["mm_assets"])
+    banks["share_tsy_other"] = 100 * _safe_div(
+        banks["exp_tsy_other"], banks["mm_assets"]
+    )
+    banks["share_res_mtg"] = 100 * _safe_div(
+        banks["exp_res_mtg"], banks["mm_assets"]
+    )
+    banks["share_other_loan"] = 100 * _safe_div(
+        banks["exp_other_loan"], banks["mm_assets"]
+    )
+
+    # Other ratios
+    banks["loss_asset_pct"] = 100 * _safe_div(
+        banks["loss_total"], banks["Total Asset"]
+    )
+    banks["unins_dep_mm_asset_pct"] = 100 * _safe_div(
+        banks["Uninsured Deposit"], banks["mm_assets"]
+    )
+
+    print("\nMean shares:")
+    print(
+        banks[
+            ["share_rmbs", "share_tsy_other", "share_res_mtg", "share_other_loan"]
+        ].mean()
+    )
+
+    groups = {
+        "All Banks": banks,
+        "Small\n(0, 1.384B)": banks[banks["size_group"] == "small"],
+        "Large (non-GSIB)\n[1.384B, )": banks[banks["size_group"] == "large_non_gsib"],
+        "GSIB": banks[banks["size_group"] == "gsib"],
+    }
+
+    out_rows: list[dict[str, str]] = []
+    out_index: list[str] = []
+
+    # Aggregate Loss = sum across banks
+    out_index.append("Aggregate Loss")
+    out_rows.append(
+        {k: _fmt_agg_loss_thousands(df["loss_total"]) for k, df in groups.items()}
+    )
+
+    # Bank-Level Loss = mean across banks, with SD in parentheses
+    out_index.append("Bank-Level Loss")
+    out_rows.append(
+        {
+            k: _fmt_mean(
+                df["loss_total"],
+                scale=1 / 1000,  # thousands -> millions
+                digits=1,
+                suffix="M",
+            )
+            for k, df in groups.items()
+        }
+    )
+    out_index.append("")
+    out_rows.append(
+        {
+            k: _fmt_sd(
+                df["loss_total"],
+                scale=1 / 1000,
+                digits=1,
+            )
+            for k, df in groups.items()
         }
     )
 
-    required_yield_cols = ["date", "1Y", "3Y", "5Y", "10Y", "20Y", "30Y"]
-    missing_yields = [c for c in required_yield_cols if c not in yields.columns]
-    if missing_yields:
-        raise ValueError(
-            f"Missing required Treasury columns: {missing_yields}. "
-            f"Available columns are: {list(yields.columns)}"
-        )
-
-    required_mbs_cols = ["date", "rmbs_px", "cmbs_px"]
-    missing_mbs = [c for c in required_mbs_cols if c not in mbs.columns]
-    if missing_mbs:
-        raise ValueError(
-            f"Missing required MBS ETF columns: {missing_mbs}. "
-            f"Available columns are: {list(mbs.columns)}"
-        )
-
-    y0 = _nearest_row(yields, MARKET_START_DATE)
-    y1 = _nearest_row(yields, MARKET_END_DATE)
-
-    m0 = _nearest_row(mbs, MARKET_START_DATE)
-    m1 = _nearest_row(mbs, MARKET_END_DATE)
-
-    durations = {
-        "1Y": 1.0,
-        "3Y": 2.5,
-        "5Y": 4.5,
-        "10Y": 8.0,
-        "20Y": 15.0,
-        "30Y": 20.0,
+    share_map = {
+        "Share RMBS": "share_rmbs",
+        "Share Treasury and Other": "share_tsy_other",
+        "Share Residential Mortgage": "share_res_mtg",
+        "Share Other Loan": "share_other_loan",
     }
 
-    shocks = {}
-    signed_tsy_price_changes = {}
+    for label, col in share_map.items():
+        out_index.append(label)
+        out_rows.append(
+            {k: _fmt_mean(df[col], digits=1) for k, df in groups.items()}
+        )
+        out_index.append("")
+        out_rows.append(
+            {k: _fmt_sd(df[col], digits=1) for k, df in groups.items()}
+        )
 
-    for tenor, duration in durations.items():
-        delta_y = (float(y1[tenor]) - float(y0[tenor])) / 100.0
-        signed_price_change = -duration * delta_y
-        signed_tsy_price_changes[tenor] = signed_price_change
-
-        # store positive loss magnitudes for Table 1 use
-        shocks[f"d_tsy_{tenor}"] = max(0.0, -signed_price_change)
-
-    # Signed ETF returns over the window
-    rmbs_return = float(m1["rmbs_px"]) / float(m0["rmbs_px"]) - 1.0
-    cmbs_return = float(m1["cmbs_px"]) / float(m0["cmbs_px"]) - 1.0
-
-    # Positive loss magnitudes
-    rmbs_loss = max(0.0, -rmbs_return)
-    cmbs_loss = max(0.0, -cmbs_return)
-
-    avg_abs_tsy_move = sum(abs(v) for v in signed_tsy_price_changes.values()) / len(
-        signed_tsy_price_changes
+    out_index.append("Loss/Asset")
+    out_rows.append(
+        {
+            k: _fmt_mean(df["loss_asset_pct"], digits=1)
+            for k, df in groups.items()
+        }
+    )
+    out_index.append("")
+    out_rows.append(
+        {
+            k: _fmt_sd(df["loss_asset_pct"], digits=1)
+            for k, df in groups.items()
+        }
     )
 
-    rmbs_multiplier = abs(rmbs_return) / avg_abs_tsy_move if avg_abs_tsy_move > 0 else 1.0
-    cmbs_multiplier = abs(cmbs_return) / avg_abs_tsy_move if avg_abs_tsy_move > 0 else 1.0
-
-    out = pd.DataFrame(
-        [
-            {
-                "market_start_date": MARKET_START_DATE,
-                "market_end_date": MARKET_END_DATE,
-                **shocks,
-                "rmbs_return": rmbs_return,
-                "cmbs_return": cmbs_return,
-                "rmbs_loss": rmbs_loss,
-                "cmbs_loss": cmbs_loss,
-                "avg_abs_tsy_move": avg_abs_tsy_move,
-                "rmbs_multiplier": rmbs_multiplier,
-                "cmbs_multiplier": cmbs_multiplier,
-            }
-        ]
+    out_index.append("Uninsured Deposit/MM Asset")
+    out_rows.append(
+        {
+            k: _fmt_mean(df["unins_dep_mm_asset_pct"], digits=1)
+            for k, df in groups.items()
+        }
+    )
+    out_index.append("")
+    out_rows.append(
+        {
+            k: _fmt_sd(df["unins_dep_mm_asset_pct"], digits=1)
+            for k, df in groups.items()
+        }
     )
 
-    outpath = DATA_DIR / "market_shocks.parquet"
-    out.to_parquet(outpath, index=False)
+    out_index.append("Number of Banks")
+    out_rows.append({k: f"{df.shape[0]:,}" for k, df in groups.items()})
 
-    print("Treasury window used:")
-    print(" start target:", MARKET_START_DATE.date(), "| matched:", pd.to_datetime(y0["date"]).date())
-    print(" end target:  ", MARKET_END_DATE.date(), "| matched:", pd.to_datetime(y1["date"]).date())
+    table = pd.DataFrame(out_rows, index=out_index)
 
-    print("\nTreasury yields at start:")
-    print(y0[["1Y", "3Y", "5Y", "10Y", "20Y", "30Y"]])
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\nTreasury yields at end:")
-    print(y1[["1Y", "3Y", "5Y", "10Y", "20Y", "30Y"]])
+    csv_path = OUTPUT_DIR / "table_1.csv"
+    tex_path = OUTPUT_DIR / "table_1.tex"
 
-    print("\nMBS window used:")
-    print(" start target:", MARKET_START_DATE.date(), "| matched:", pd.to_datetime(m0["date"]).date())
-    print(" end target:  ", MARKET_END_DATE.date(), "| matched:", pd.to_datetime(m1["date"]).date())
-    print(f" RMBS price start/end: {float(m0['rmbs_px']):.4f} -> {float(m1['rmbs_px']):.4f}")
-    print(f" CMBS price start/end: {float(m0['cmbs_px']):.4f} -> {float(m1['cmbs_px']):.4f}")
+    table.to_csv(csv_path)
 
-    print("\nComputed shocks:")
-    print(out.T)
-    print(f"\nSaved {outpath}")
+    latex_str = _format_table_latex(table)
+    with open(tex_path, "w", encoding="utf-8") as f:
+        f.write(latex_str)
+
+    print("\nTable 1:")
+    print(table)
+    print(f"\nSaved -> {csv_path}")
+    print(f"Saved -> {tex_path}")
 
 
 if __name__ == "__main__":
